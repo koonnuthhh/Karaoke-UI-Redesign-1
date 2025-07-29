@@ -16,7 +16,7 @@ export function generateTimeSlots(startTime: string, endTime: string, slotDurati
 
   const current = new Date(start)
 
-  while (current < end) {
+  while (current <= end) {
     const timeString = current.toTimeString().slice(0, 5)
     slots.push(timeString)
     current.setMinutes(current.getMinutes() + slotDuration)

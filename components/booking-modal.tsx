@@ -66,50 +66,91 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
   // Find the first unavailable slot after start time
   const firstUnavailableSlot = scheduleData.timeSlots
     .filter(slot => {
-      const slotTime = new Date(`2000-01-01T${slot}`)
-      const startTimeObj = new Date(`2000-01-01T${startTime}`)
-      return slotTime > startTimeObj
+      let slotTime;
+      let startTimeObj;
+      
+      // Handle overnight hours for slot time
+      if (slot < "06:00") {
+        slotTime = new Date(`2000-01-02T${slot}`);
+      } else {
+        slotTime = new Date(`2000-01-01T${slot}`);
+      }
+      
+      // Handle overnight hours for start time
+      if (startTime < "06:00") {
+        startTimeObj = new Date(`2000-01-02T${startTime}`);
+      } else {
+        startTimeObj = new Date(`2000-01-01T${startTime}`);
+      }
+      
+      return slotTime > startTimeObj;
     })
     .find(slot => !isTimeSlotAvailable(slot, room.id, scheduleData.bookings))
 
   // Find the closing time slot
   const firstCloseSlot = scheduleData.timeSlots.find(slot => slot === siteConfig.schedule.closeTime)
 
-  // Available end times - must be after start time and before first unavailable slot or closing time + 1 slot
+  // Available end times - must be after start time and before first unavailable slot or closing time
   const availableEndTimes = scheduleData.timeSlots
     .filter(slot => {
-      let startTimeObj = new Date(`2000-01-01T${startTime}`);
+      // Handle overnight hours properly
+      let startTimeObj;
       let slotTime;
-      if (slot < startTime) {
+      
+      // Convert start time to Date object
+      if (startTime < "06:00") {
+        startTimeObj = new Date(`2000-01-02T${startTime}`);
+      } else {
+        startTimeObj = new Date(`2000-01-01T${startTime}`);
+      }
+      
+      // Convert slot time to Date object
+      if (slot < "06:00") {
         slotTime = new Date(`2000-01-02T${slot}`);
       } else {
         slotTime = new Date(`2000-01-01T${slot}`);
       }
+      
+      // End time must be after start time
       if (slotTime <= startTimeObj) return false;
 
-
-      // Must be before the first unavailable slot + 1 slot (if any)
+      // Must be before the first unavailable slot (if any)
       if (firstUnavailableSlot) {
-        const unavailableTime = new Date(`2000-01-01T${firstUnavailableSlot}`)
-        const limitTime = new Date(unavailableTime.getTime() + 30 * 60 * 1000) // Add 30 minutes
-        if (slotTime >= limitTime) return false
+        let unavailableTime;
+        if (firstUnavailableSlot < "06:00") {
+          unavailableTime = new Date(`2000-01-02T${firstUnavailableSlot}`);
+        } else {
+          unavailableTime = new Date(`2000-01-01T${firstUnavailableSlot}`);
+        }
+        if (slotTime > unavailableTime) return false;
       }
 
+      // Must be before or equal to closing time
+      if (firstCloseSlot) {
+        let closeTime;
+        if (firstCloseSlot < "06:00") {
+          closeTime = new Date(`2000-01-02T${firstCloseSlot}`);
+        } else {
+          closeTime = new Date(`2000-01-01T${firstCloseSlot}`);
+        }
+        if (slotTime > closeTime) return false;
+      }
 
-      // Must be before closing time + 1 slot
-      // if (firstCloseSlot) {
-      //   const closeTime = new Date(`2000-01-01T${firstCloseSlot}`)
-      //   const limitTime = new Date(closeTime.getTime() + 30 * 60 * 1000) // Add 30 minutes
-      //   if (slotTime >= limitTime) return false
-      // }
-
-      return true
+      return true;
     })
 
   // Debug logging
-  // console.log('Start time:', startTime)
-  // console.log('Available slots:', scheduleData.timeSlots)
-  // console.log('Available end times:', availableEndTimes)
+  console.log('=== DEBUG: Booking Modal ===')
+  console.log('Site config close time:', siteConfig.schedule.closeTime)
+  console.log('First close slot found:', firstCloseSlot)
+  console.log('Start time:', startTime)
+  console.log('ScheduleData.timeSlots (all available time slots):', scheduleData.timeSlots)
+  console.log('Available slots (filtered for this room):', availableSlots)
+  console.log('Available end times:', availableEndTimes)
+  console.log('First unavailable slot:', firstUnavailableSlot)
+  console.log('Room ID:', room.id)
+  console.log('Schedule data bookings:', scheduleData.bookings)
+  console.log('=== END DEBUG ===')
 
   const totalDuration = startTime && endTime ?
     (() => {

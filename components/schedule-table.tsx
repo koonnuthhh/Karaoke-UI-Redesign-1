@@ -83,7 +83,7 @@ export function ScheduleTable({ scheduleData, isLoading }: ScheduleTableProps) {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {scheduleData.timeSlots.map((timeSlot) => (
+              {scheduleData.timeSlots.slice(0, -1).map((timeSlot) => (
                 <tr key={timeSlot} className="hover:bg-gray-50">
                   <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{timeSlot}</td>
                   {scheduleData.rooms.map((room) => {
