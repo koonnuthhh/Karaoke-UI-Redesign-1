@@ -1,41 +1,31 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { siteConfig } from "../../../config/site-config"
 import { generateTimeSlots } from "../../../lib/time-utils"
+import { ApiKeyConfig } from "config/apiKey.config"
 
-// Mock data - replace with actual API calls
-const generateMockSchedule = (date: string) => {
-  const timeSlots = generateTimeSlots(
-    siteConfig.schedule.openTime,
-    siteConfig.schedule.closeTime,
-    siteConfig.schedule.slotDuration,
-  )
+function timeToMinutes(t: string): number {
+  const [h, m] = t.split(":").map(Number)
+  const total = h * 60 + m
 
-  const bookings = siteConfig.rooms.flatMap((room) =>
-    timeSlots.map((time, index) => {
-      const nextSlot = timeSlots[index + 1]
-      const endTime = nextSlot || "03:30"
-      const randomstatus = Math.random()
-      return {
-        id: `${room.id}-${date}-${time}`,
-        roomId: room.id,
-        date,
-        startTime: time,
-        endTime,
-        isAvailable: randomstatus >= 0.2,
-        isBooked: randomstatus < 0.2,
-        customerName: Math.random() > 0.8 ? "John Doe" : undefined,
-        price: room.hourlyRate / 2, // Half price for 30-minute slots
-        duration: siteConfig.schedule.slotDuration,
-      }
-    }),
-  )
+  // แปลงเวลาปิดจาก siteConfig เป็นนาที
+  const closeTimeMinutes = (() => {
+    const [ch, cm] = siteConfig.schedule.closeTime.split(":").map(Number)
+    return ch * 60 + cm
+  })()
 
-  return {
-    date,
-    timeSlots,
-    rooms: siteConfig.rooms,
-    bookings,
-  }
+  // ถ้าเวลาน้อยกว่าหรือเท่ากับเวลาปิด แปลว่าเป็นของวันถัดไป → บวก 1440 นาที
+  if (total <= closeTimeMinutes) return total + 1440
+
+  return total
+}
+function getBookingRange(booking: any) {
+  const start = timeToMinutes(booking.start_time?.slice(0, 5))
+  let end = timeToMinutes(booking.end_time?.slice(0, 5))
+
+  // If end is less than start, assume it's next day
+  if (end <= start) end += 1440 // +24 hours
+  //console.log("Booking range:", start, end)
+  return { start, end }
 }
 
 export async function GET(request: NextRequest) {
@@ -43,9 +33,96 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const date = searchParams.get("date") || new Date().toISOString().split("T")[0]
 
-    const mockData = generateMockSchedule(date)
+    const response = await fetch(
+      `${siteConfig.api.apipath}/user/bookings/date/${date}`,
+      {
+        method: "GET",
+        headers: {
+          APIKEY: ApiKeyConfig.API_KEY,
+          "Content-Type": "application/json",
+        },
+      },
+    )
 
-    return NextResponse.json(mockData)
+    const rawResponse = await response.json()
+    const rawData = rawResponse.data || []
+    console.log("Fetched bookings:", rawData.length)
+    //console.log(rawData)
+    const timeSlots = generateTimeSlots(
+      siteConfig.schedule.openTime,
+      siteConfig.schedule.closeTime,
+      siteConfig.schedule.slotDuration,
+    )
+
+    const bookings = siteConfig.rooms.flatMap((room) =>
+      timeSlots.map((time, index) => {
+        const nextSlot = timeSlots[index + 1]
+        const endTime = nextSlot || siteConfig.schedule.closeTime
+
+        const slotStart = timeToMinutes(time)
+        let slotEnd = timeToMinutes(endTime)
+        if (slotEnd <= slotStart) slotEnd += 1440 // Handle overnight slots too
+
+        const realBooking = rawData.find((b: any) => {
+          //console.log("b-id:", b.room_id, "room.id:", room.id, "date:", date, "time:", time)
+          // Calculate date+1
+          const datePlusOne = new Date(date)
+          datePlusOne.setDate(datePlusOne.getDate() + 1)
+          const nextDate = datePlusOne.toISOString().split("T")[0]
+
+          // Skip if room ID doesn't match
+          if (b.room_id !== room.id) return false
+
+          // Skip if booking is not from current date or next date
+          //console.log("Booking date:", b.date, "Current date:", date, "Next date:", nextDate);
+
+          if (b.date !== date && b.date !== nextDate) {
+            console.log("Skipping booking due to mismatched date:", b.date);
+            return false;
+          }
+
+          // If it's from nextDate (e.g., 2025-08-02),
+          // only allow it if time is after closeTime
+          const { start: bookingStart, end: bookingEnd } = getBookingRange(b)
+          if (
+            b.date === nextDate &&
+            slotStart <= timeToMinutes(siteConfig.schedule.closeTime)
+          ) {
+            console.log("Booking start:", bookingStart, "Slot end:", slotEnd);
+            return false
+          }
+
+
+          // console.log("Booking start:", bookingStart, "Slot end:", slotEnd);
+          // console.log("Booking end:", bookingEnd, "Slot start:", slotStart);
+          return bookingStart < slotEnd && bookingEnd > slotStart;
+        })
+
+        const status = realBooking?.status ?? "available"
+
+        return {
+          id: realBooking?.booking_id || `${room.id}-${date}-${time}`,
+          roomId: room.id,
+          date,
+          startTime: time,
+          endTime,
+          isAvailable: status === "available",
+          isBooked: status === "booked",
+          customerName: undefined,
+          price: realBooking?.price ?? room.hourlyRate / 2,
+          duration: siteConfig.schedule.slotDuration,
+        }
+      }),
+    )
+
+    const formatted = {
+      date,
+      timeSlots,
+      rooms: siteConfig.rooms,
+      bookings,
+    }
+    //console.log("Formatted schedule data:", formatted)
+    return NextResponse.json(formatted)
   } catch (error) {
     console.error("Schedule API Error:", error)
     return NextResponse.json({ error: "Failed to fetch schedule" }, { status: 500 })

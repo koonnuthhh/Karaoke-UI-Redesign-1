@@ -11,7 +11,7 @@ export function generateTimeSlots(startTime: string, endTime: string, slotDurati
 
   // Handle overnight hours (e.g., until 03:00 next day)
   if (end < start) {
-    end.setDate(end.getDate() + 1)
+     end.setDate(end.getDate() + 1)
   }
 
   const current = new Date(start)

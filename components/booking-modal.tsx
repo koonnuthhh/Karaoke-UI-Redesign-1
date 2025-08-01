@@ -42,8 +42,8 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
       const defaultEndTimeString = `${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`
 
       // Check if default end time is available
-      const isDefaultEndTimeAvailable = scheduleData.timeSlots.includes(defaultEndTimeString) &&
-        isTimeSlotAvailable(defaultEndTimeString, room.id, scheduleData.bookings)
+      const isDefaultEndTimeAvailable = scheduleData.timeSlots.includes(defaultEndTimeString) 
+      //&& isTimeSlotAvailable(defaultEndTimeString, room.id, scheduleData.bookings)
 
       if (isDefaultEndTimeAvailable) {
         setEndTime(defaultEndTimeString)
@@ -144,6 +144,7 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
   console.log('Site config close time:', siteConfig.schedule.closeTime)
   console.log('First close slot found:', firstCloseSlot)
   console.log('Start time:', startTime)
+  console.log('End time: ', endTime)
   console.log('ScheduleData.timeSlots (all available time slots):', scheduleData.timeSlots)
   console.log('Available slots (filtered for this room):', availableSlots)
   console.log('Available end times:', availableEndTimes)
@@ -155,12 +156,18 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
   const totalDuration = startTime && endTime ?
     (() => {
       let endTimeDate
+      let startTimeDate
       if (endTime < "06:00") {
         endTimeDate = new Date(`2000-01-02T${endTime}`)
       } else {
         endTimeDate = new Date(`2000-01-01T${endTime}`)
       }
-      const startTimeDate = new Date(`2000-01-01T${startTime}`)
+
+      if (startTime < "06:00") {
+        startTimeDate = new Date(`2000-01-02T${startTime}`)
+      } else {
+        startTimeDate = new Date(`2000-01-01T${startTime}`)
+      }
       return (endTimeDate.getTime() - startTimeDate.getTime()) / (1000 * 60)
     })() : 0
   const totalPrice = calculatePrice(room.hourlyRate, totalDuration)
@@ -305,7 +312,7 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
                 <span className="font-medium">Duration:</span> {formatDuration(totalDuration)}
               </p>
               <p>
-                <span className="font-medium">Total Price:</span> ${totalPrice.toFixed(2)}
+                <span className="font-medium">Total Price:</span> ฿{totalPrice.toFixed(2)}
               </p>
               <p>
                 <span className="font-medium">Capacity:</span> {room.capacity}
@@ -412,7 +419,7 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
                     <span className="ml-2">Processing...</span>
                   </>
                 ) : (
-                  `${siteConfig.content.booking.confirmButton} - $${totalPrice.toFixed(2)}`
+                  `${siteConfig.content.booking.confirmButton} $${totalPrice.toFixed(2)}`
                 )}
               </button>
             </div>

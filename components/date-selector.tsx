@@ -1,5 +1,6 @@
 "use client"
 
+import { siteConfig } from "config/site-config"
 import { Calendar } from "lucide-react"
 
 interface DateSelectorProps {
@@ -10,7 +11,7 @@ interface DateSelectorProps {
 export function DateSelector({ selectedDate, onDateChange }: DateSelectorProps) {
   const today = new Date().toISOString().split("T")[0]
   const maxDate = new Date()
-  maxDate.setDate(maxDate.getDate() + 30)
+  maxDate.setDate(maxDate.getDate() + siteConfig.schedule.maximumPrebook)
   const maxDateString = maxDate.toISOString().split("T")[0]
 
   return (

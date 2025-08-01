@@ -1,8 +1,8 @@
 export const siteConfig = {
   // Business Information
   business: {
-    name: "Harmony Karaoke Lounge",
-    tagline: "Book Your Perfect Karaoke Experience",
+    name: "Alumfia Karaoke",
+    tagline: "Be Your Perfect Karaoke Experience",
     phone: "+1 (555) 123-4567",
     email: "bookings@harmonykaraoke.com",
     address: "123 Music Street, Entertainment District",
@@ -11,7 +11,7 @@ export const siteConfig = {
   // Room Configuration
   rooms: [
     {
-      id: "room-1",
+      id: "8d4414e9-e756-4f9b-8d8b-2ea7492b93c1",
       name: "Intimate Studio",
       capacity: "2-4 people",
       hourlyRate: 25,
@@ -42,9 +42,10 @@ export const siteConfig = {
 
   // Schedule Configuration
   schedule: {
+    maximumPrebook: 60,
     slotDuration: 30, // minutes
     openTime: "10:00",
-    closeTime: "03:00",
+    closeTime: "01:00",
   },
 
   // Business Hours
@@ -86,19 +87,27 @@ export const siteConfig = {
 
   // UI Configuration
   theme: {
-    primary: "rgb(147, 51, 234)", // purple-600
-    secondary: "rgb(59, 130, 246)", // blue-500
+    maintext: "text-grey-400",
+    primary: "rgb(27, 20, 34)", // purple-600
+    secondary: "rgb(18, 64, 138)", // blue-500
+
     accent: "rgb(245, 158, 11)", // amber-500
     success: "rgb(34, 197, 94)", // green-500
     error: "rgb(239, 68, 68)", // red-500
     warning: "rgb(245, 158, 11)", // amber-500
+
+    roomavailable: "rgb(43, 170, 243)",
+    roomavailableHover: "rgb(23, 126, 145)",
+    roompending: "rgba(88, 233, 31, 1)", // red-400
+    roombooked:"rgba(253, 18, 18, 1)",
+    roomclosed:"rgb(150,150,150)"
   },
 
   // Text Content
   content: {
     hero: {
-      title: "Book Your Karaoke Room",
-      subtitle: "Choose from our premium rooms and sing your heart out!",
+      title: "This could be use for Title of promotion",
+      subtitle: "This could be use for detail!",
     },
     booking: {
       modalTitle: "Book Your Karaoke Session",
@@ -122,10 +131,12 @@ export const siteConfig = {
 
   // API Configuration
   api: {
+    apipath: "http://localhost:3000",
     endpoints: {
       bookings: "/api/bookings",
       rooms: "/api/rooms",
       schedule: "/api/schedule",
+      //schedule: "user/bookings/date/",
       payment: "/api/payment",
       admin: "/api/admin",
     },
