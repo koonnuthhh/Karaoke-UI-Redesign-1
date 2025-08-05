@@ -8,37 +8,12 @@ export const siteConfig = {
     address: "123 Music Street, Entertainment District",
   },
 
-  // Room Configuration
-  rooms: [
-    {
-      id: "8d4414e9-e756-4f9b-8d8b-2ea7492b93c1",
-      name: "Intimate Studio",
-      capacity: "2-4 people",
-      hourlyRate: 25,
-      features: ["Premium sound system", "Mood lighting", "Snack service"],
-    },
-    {
-      id: "room-2",
-      name: "Party Room",
-      capacity: "6-10 people",
-      hourlyRate: 45,
-      features: ["Large screen", "Dance floor", "Full bar service", "DJ booth"],
-    },
-    {
-      id: "room-3",
-      name: "VIP Suite",
-      capacity: "10-15 people",
-      hourlyRate: 75,
-      features: ["Private bathroom", "Luxury seating", "Champagne service", "Personal host"],
-    },
-    {
-      id: "room-4",
-      name: "Super VIP",
-      capacity: "10-15 people",
-      hourlyRate: 75,
-      features: ["Private bathroom", "Luxury seating", "Champagne service", "Personal host"],
-    },
-  ],
+  payment: {
+    promptPayNumber: "0957742547", 
+    currency: "THB",
+  },
+
+
 
   // Schedule Configuration
   schedule: {
@@ -60,18 +35,6 @@ export const siteConfig = {
   },
 
   // Pricing Rules
-  pricing: {
-    peakHours: {
-      start: "19:00",
-      end: "23:00",
-      multiplier: 1.5,
-      days: ["friday", "saturday"],
-    },
-    minimumBooking: 1, // 30-minute slots
-    maximumBooking: 12, // 6 hours in 30-minute slots
-    advanceBookingDays: 30,
-    cancellationHours: 24,
-  },
 
   // Admin Configuration
   admin: {
@@ -136,7 +99,6 @@ export const siteConfig = {
       bookings: "/api/bookings",
       rooms: "/api/rooms",
       schedule: "/api/schedule",
-      //schedule: "user/bookings/date/",
       payment: "/api/payment",
       admin: "/api/admin",
     },

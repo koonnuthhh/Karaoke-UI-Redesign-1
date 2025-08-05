@@ -9,29 +9,24 @@ import { ca } from "date-fns/locale"
 
 interface ScheduleTableProps {
   scheduleData: ScheduleData
-  isLoading?: boolean 
+  isLoading?: boolean
 }
 
-function getSlotStatus(slot: TimeSlot): "booked" | "Closed" | "available" | "Pending" {
-  if (slot.isBooked) return "booked"
-  if(!slot.isBooked && !slot.isAvailable) return "Pending"
-  if (!slot.isAvailable) return "Closed"
-  return "available"
-}
+
 
 function getSlotStyles(slot: TimeSlot): string {
-  const status = getSlotStatus(slot)
+  const status = slot.status
   const baseStyles =
     "p-2 text-center text-sm border rounded cursor-pointer transition-colors duration-200 select-none"
 
   switch (status) {
     case "booked":
       return `${baseStyles} ${siteConfig.theme.maintext} border-red-200 cursor-not-allowed`
-    case "Closed":
+    case "closed":
       return `${baseStyles} ${siteConfig.theme.maintext} border-gray-200 cursor-not-allowed`
     case "available":
       return `${baseStyles} ${siteConfig.theme.maintext} border-green-200`
-    case "Pending":
+    case "pending":
       return `${baseStyles} ${siteConfig.theme.maintext} border-yellow-200 cursor-not-allowed`
     default:
       return baseStyles
@@ -39,21 +34,21 @@ function getSlotStyles(slot: TimeSlot): string {
 }
 
 function getSlotColor(slot: TimeSlot, isHover: boolean): string {
-  const status = getSlotStatus(slot)
+  const status = slot.status
 
   switch (status) {
     case "booked":
       return siteConfig.theme.roombooked
-    case "Closed":
+    case "closed":
       return siteConfig.theme.roomclosed
-    case "Pending":
+    case "pending":
       return siteConfig.theme.roompending
     case "available":
       return isHover
         ? siteConfig.theme.roomavailableHover
         : siteConfig.theme.roomavailable
     default:
-      return siteConfig.theme.error
+      return siteConfig.theme.roomclosed
   }
 }
 
@@ -65,6 +60,7 @@ function SlotCell({
   onClick: (slot: TimeSlot) => void
 }) {
   const [isHover, setIsHover] = useState(false)
+  //console.log("Slot status: ", slot.status)
 
   return (
     <td
@@ -75,25 +71,25 @@ function SlotCell({
       <div
         className={getSlotStyles(slot)}
         style={{ background: getSlotColor(slot, isHover) }}
-        onClick={() => slot.isAvailable && !slot.isBooked && onClick(slot)}
+        onClick={() => slot.status === "available" && onClick(slot)}
       >
-        {slot.isBooked ? (
+        {slot.status === "booked" ? (
           <div>
             <div className="font-medium">Booked</div>
             {/* {slot.customerName && (
               <div className="text-xs">{slot.customerName}</div>
             )} */}
           </div>
-        ) : slot.isAvailable ? (
+        ) : slot.status === "available" ? (
           <div>
             <div className="font-medium cursor-pointer">Available</div>
             {/* <div className="text-xs">${slot.price}</div> */}
           </div>
-        ) : !slot.isBooked && !slot.isAvailable ? (
+        ) : slot.status === "pending" ? (
           <div>
             <div className="font-medium">Pending</div>
           </div>
-        ):(
+        ) : (
           <div className="font-medium">Closed</div>
         )}
       </div>
@@ -147,14 +143,14 @@ export function ScheduleTable({ scheduleData, isLoading }: ScheduleTableProps) {
                 </th>
                 {scheduleData.rooms.map((room) => (
                   <th
-                    key={room.id}
+                    key={room.room_id}
                     className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider"
                   >
                     <div className="flex flex-col items-center">
-                      <span className="font-semibold">{room.name}</span>
+                      <span className="font-semibold">{room.room_name}</span>
                       <span className="text-xs text-gray-400">{room.capacity}</span>
                       <span className="text-xs font-bold text-purple-600">
-                      ฿{room.hourlyRate}/hr
+                        ฿{room.price_per_half_hour * 2}/hr
                       </span>
                     </div>
                   </th>
@@ -163,21 +159,23 @@ export function ScheduleTable({ scheduleData, isLoading }: ScheduleTableProps) {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {scheduleData.timeSlots.slice(0, -1).map((timeSlot) => (
+
                 <tr key={timeSlot} className="hover:bg-gray-50">
                   <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
                     {timeSlot}
                   </td>
                   {scheduleData.rooms.map((room) => {
-                    const slot = scheduleData.bookings.find(
-                      (booking) =>
-                        booking.roomId === room.id &&
-                        booking.startTime === timeSlot,
-                    )
+                    const slot = scheduleData.bookings.find((booking) => {
+                      return (
+                        booking.roomId === room.room_id &&
+                        booking.startTime === timeSlot
+                      )
+                    })
 
                     if (!slot) {
                       return (
                         <td
-                          key={`${room.id}-${timeSlot}`}
+                          key={`${room.room_id}-${timeSlot}`}
                           className="px-4 py-3 text-center"
                         >
                           <div
@@ -192,7 +190,7 @@ export function ScheduleTable({ scheduleData, isLoading }: ScheduleTableProps) {
 
                     return (
                       <SlotCell
-                        key={`${room.id}-${timeSlot}`}
+                        key={`${room.room_id}-${timeSlot}`}
                         slot={slot}
                         onClick={handleSlotClick}
                       />
@@ -246,7 +244,7 @@ export function ScheduleTable({ scheduleData, isLoading }: ScheduleTableProps) {
             setSelectedSlot(null)
           }}
           timeSlot={selectedSlot}
-          room={scheduleData.rooms.find((r) => r.id === selectedSlot.roomId)!}
+          room={scheduleData.rooms.find((r) => r.room_id === selectedSlot.roomId)!}
           scheduleData={scheduleData}
         />
       )}

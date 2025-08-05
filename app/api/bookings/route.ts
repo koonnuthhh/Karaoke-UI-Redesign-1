@@ -6,7 +6,7 @@ export async function POST(request: NextRequest) {
     const booking: BookingRequest = await request.json()
 
     // Validate booking data
-    if (!booking.roomId || !booking.date || !booking.startTime || !booking.endTime) {
+    if (!booking.roomId || !booking.date ) {
       return NextResponse.json({ success: false, message: "Missing required booking information" }, { status: 400 })
     }
 

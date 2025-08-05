@@ -1,8 +1,8 @@
 export interface Room {
-  id: string
-  name: string
+  room_id: string
+  room_name: string
   capacity: string
-  hourlyRate: number
+  price_per_half_hour: number
   features: string[]
   color: string
 }
@@ -13,16 +13,13 @@ export interface TimeSlot {
   date: string
   startTime: string
   endTime: string
-  isAvailable: boolean
-  isBooked: boolean
+  status: string
   customerName?: string
   price?: number
   duration: number // in minutes
 }
 
 export interface BookingRequest {
-  startTime: any
-  endTime: any
   roomId: string
   date: string
   timeSlots: string[] // Array of selected time slots

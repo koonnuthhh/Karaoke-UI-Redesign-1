@@ -1,8 +1,5 @@
-type TimeSlot = {
-  roomId: string
-  startTime: string
-  isBooked: boolean
-}
+import { TimeSlot } from "types"
+
 
 export function generateTimeSlots(startTime: string, endTime: string, slotDuration = 30): string[] {
   const slots: string[] = []
@@ -27,7 +24,7 @@ export function generateTimeSlots(startTime: string, endTime: string, slotDurati
 
 export function calculatePrice(baseRate: number, duration: number, isPeakTime = false): number {
   const hours = duration / 60
-  const basePrice = baseRate * hours
+  const basePrice = baseRate * 2 * hours
   return isPeakTime ? basePrice * 1.5 : basePrice
 }
 
@@ -45,7 +42,7 @@ export function formatDuration(minutes: number): string {
 }
 
 export function isTimeSlotAvailable(timeSlot: string, roomId: string, bookings: TimeSlot[]): boolean {
-  return !bookings.some((booking) => booking.roomId === roomId && booking.startTime === timeSlot && booking.isBooked)
+  return !bookings.some((booking) => booking.roomId === roomId && booking.startTime === timeSlot && booking.status == "booked")
 }
 
 export function getConsecutiveSlots(selectedSlots: string[], allSlots: string[]): boolean {

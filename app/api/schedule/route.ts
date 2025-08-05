@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { siteConfig } from "../../../config/site-config"
 import { generateTimeSlots } from "../../../lib/time-utils"
 import { ApiKeyConfig } from "config/apiKey.config"
+import { Room, TimeSlot } from "types"
 
 function timeToMinutes(t: string): number {
   const [h, m] = t.split(":").map(Number)
@@ -28,33 +29,52 @@ function getBookingRange(booking: any) {
   return { start, end }
 }
 
+const APIKEY = ApiKeyConfig.API_KEY;
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const date = searchParams.get("date") || new Date().toISOString().split("T")[0]
 
-    const response = await fetch(
+    const responseroomdata = await fetch(
+      `${siteConfig.api.apipath}/admin/rooms`,
+      {
+        method: "GET",
+        headers: {
+          APIKEY: APIKEY,
+          "Content-Type": "application/json",
+        },
+      },
+    )
+    const rawResponseroomdata = await responseroomdata.json()
+    console.log("rawResponseroomdata : ", rawResponseroomdata)
+    const roomData = rawResponseroomdata.data || []
+    console.log("Fetched Rooms:", roomData.length)
+    //console.log("Fetched RoomID:", roomData.room_id)
+    const responsebooked = await fetch(
       `${siteConfig.api.apipath}/user/bookings/date/${date}`,
       {
         method: "GET",
         headers: {
-          APIKEY: ApiKeyConfig.API_KEY,
+          APIKEY: APIKEY,
           "Content-Type": "application/json",
         },
       },
     )
 
-    const rawResponse = await response.json()
-    const rawData = rawResponse.data || []
+    const rawResponsebooked = await responsebooked.json()
+    const rawData = rawResponsebooked.data || []
     console.log("Fetched bookings:", rawData.length)
     //console.log(rawData)
+
+
     const timeSlots = generateTimeSlots(
       siteConfig.schedule.openTime,
       siteConfig.schedule.closeTime,
       siteConfig.schedule.slotDuration,
     )
 
-    const bookings = siteConfig.rooms.flatMap((room) =>
+    const bookings = roomData.flatMap((room : Room) =>
       timeSlots.map((time, index) => {
         const nextSlot = timeSlots[index + 1]
         const endTime = nextSlot || siteConfig.schedule.closeTime
@@ -71,7 +91,7 @@ export async function GET(request: NextRequest) {
           const nextDate = datePlusOne.toISOString().split("T")[0]
 
           // Skip if room ID doesn't match
-          if (b.room_id !== room.id) return false
+          if (b.room_id !== room.room_id) return false
 
           // Skip if booking is not from current date or next date
           //console.log("Booking date:", b.date, "Current date:", date, "Next date:", nextDate);
@@ -88,7 +108,7 @@ export async function GET(request: NextRequest) {
             b.date === nextDate &&
             slotStart <= timeToMinutes(siteConfig.schedule.closeTime)
           ) {
-            console.log("Booking start:", bookingStart, "Slot end:", slotEnd);
+            //console.log("Booking start:", bookingStart, "Slot end:", slotEnd);
             return false
           }
 
@@ -101,24 +121,23 @@ export async function GET(request: NextRequest) {
         const status = realBooking?.status ?? "available"
 
         return {
-          id: realBooking?.booking_id || `${room.id}-${date}-${time}`,
-          roomId: room.id,
+          id: realBooking?.booking_id || `${room.room_id}-${date}-${time}`,
+          roomId: room.room_id,
           date,
           startTime: time,
           endTime,
-          isAvailable: status === "available",
-          isBooked: status === "booked",
+          status: status,
           customerName: undefined,
-          price: realBooking?.price ?? room.hourlyRate / 2,
+          price: realBooking?.price ?? room.price_per_half_hour,
           duration: siteConfig.schedule.slotDuration,
-        }
+        } as TimeSlot
       }),
     )
 
     const formatted = {
       date,
       timeSlots,
-      rooms: siteConfig.rooms,
+      rooms: roomData,
       bookings,
     }
     //console.log("Formatted schedule data:", formatted)
