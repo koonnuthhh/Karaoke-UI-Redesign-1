@@ -10,6 +10,7 @@ import { ca } from "date-fns/locale"
 interface ScheduleTableProps {
   scheduleData: ScheduleData
   isLoading?: boolean
+  handleRefresh: () => void
 }
 
 
@@ -24,6 +25,8 @@ function getSlotStyles(slot: TimeSlot): string {
       return `${baseStyles} ${siteConfig.theme.maintext} border-red-200 cursor-not-allowed`
     case "closed":
       return `${baseStyles} ${siteConfig.theme.maintext} border-gray-200 cursor-not-allowed`
+    case "cancelled":
+      return `${baseStyles} ${siteConfig.theme.maintext} border-green-200`
     case "available":
       return `${baseStyles} ${siteConfig.theme.maintext} border-green-200`
     case "pending":
@@ -39,6 +42,10 @@ function getSlotColor(slot: TimeSlot, isHover: boolean): string {
   switch (status) {
     case "booked":
       return siteConfig.theme.roombooked
+    case "cancelled":
+      return isHover
+        ? siteConfig.theme.roomavailableHover
+        : siteConfig.theme.roomavailable
     case "closed":
       return siteConfig.theme.roomclosed
     case "pending":
@@ -71,7 +78,7 @@ function SlotCell({
       <div
         className={getSlotStyles(slot)}
         style={{ background: getSlotColor(slot, isHover) }}
-        onClick={() => slot.status === "available" && onClick(slot)}
+        onClick={() => (slot.status === "available" || slot.status === "cancelled") && onClick(slot)}
       >
         {slot.status === "booked" ? (
           <div>
@@ -85,19 +92,25 @@ function SlotCell({
             <div className="font-medium cursor-pointer">Available</div>
             {/* <div className="text-xs">${slot.price}</div> */}
           </div>
-        ) : slot.status === "pending" ? (
-          <div>
-            <div className="font-medium">Pending</div>
-          </div>
-        ) : (
-          <div className="font-medium">Closed</div>
-        )}
+        )
+          : slot.status === "cancelled" ? (
+            <div>
+              <div className="font-medium cursor-pointer">Available</div>
+              {/* <div className="text-xs">${slot.price}</div> */}
+            </div>
+          ) : slot.status === "pending" ? (
+            <div>
+              <div className="font-medium">Pending</div>
+            </div>
+          ) : (
+            <div className="font-medium">Closed</div>
+          )}
       </div>
     </td>
   )
 }
 
-export function ScheduleTable({ scheduleData, isLoading }: ScheduleTableProps) {
+export function ScheduleTable({ scheduleData, isLoading, handleRefresh }: ScheduleTableProps) {
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
 
@@ -242,6 +255,7 @@ export function ScheduleTable({ scheduleData, isLoading }: ScheduleTableProps) {
           onClose={() => {
             setIsModalOpen(false)
             setSelectedSlot(null)
+            handleRefresh()
           }}
           timeSlot={selectedSlot}
           room={scheduleData.rooms.find((r) => r.room_id === selectedSlot.roomId)!}

@@ -4,60 +4,65 @@ interface SlipVerificationResult {
   success: boolean
   amount: number
   timestamp: string
-  transactionId: string
   message: string
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const formData = await request.formData()
-    const slip = formData.get("slip") as File
-    const bookingId = formData.get("bookingId") as string
-    const expectedAmount = Number.parseFloat(formData.get("expectedAmount") as string)
+    const qrData = await request.json()
+    const slip = qrData.decodedQR
+    const bookingId = qrData.bookingId
+    const expectedAmount = qrData.expectedAmount
 
     if (!slip || !bookingId || !expectedAmount) {
       return NextResponse.json({ success: false, message: "Missing required fields" }, { status: 400 })
     }
 
-    // Validate file type
-    if (!slip.type.startsWith("image/")) {
-      return NextResponse.json(
-        { success: false, message: "Invalid file type. Please upload an image." },
-        { status: 400 },
-      )
-    }
-
-    // Convert file to base64 for API call
-    const bytes = await slip.arrayBuffer()
-    const buffer = Buffer.from(bytes)
-    const base64Image = buffer.toString("base64")
-
     // In production, replace with actual slip verification API
     // Example: Thai QR Payment slip verification service
-    // const verificationResponse = await fetch('https://api.slipverify.com/verify', {
-    //   method: 'POST',
-    //   headers: {
-    //     'Authorization': `Bearer ${process.env.SLIP_VERIFY_API_KEY}`,
-    //     'Content-Type': 'application/json'
-    //   },
-    //   body: JSON.stringify({
-    //     image: base64Image,
-    //     expectedAmount: expectedAmount
-    //   })
-    // });
+    const verificationResponse = await fetch(`${process.env.SLIP_VERIFY_API_URL}/api/verify-slip/qr-code/info`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.SLIP_VERIFY_SECRET_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        payload: {
+          qrCode: slip, // this should be the decoded string from QR
+          // checkCondition: {
+          //   // checkDuplicate : true
+          //   checkReceiver: [{
+          //     accountType: "01002",
+          //     accountNameTH: "กฤตภาส เฉลิมพงษ์"
+          //   }],
+          //   checkAmount: {
+          //     type: "eq", // eq, gte, lte
+          //     amount: expectedAmount
+          //   },
+          // }
+        }
+      }),
+    })
 
-    // Mock verification logic for demo
-    await new Promise((resolve) => setTimeout(resolve, 2000)) // Simulate API delay
+    const verificationData = await verificationResponse.json()
+    //console.log("verificationData: ", verificationData)
 
-    // Mock successful verification (90% success rate for demo)
-    const isVerified = Math.random() > 0.1
+    let isVerified
+    // console.log("verificationData.code === 200000: ",verificationData.code === "200000")
+    // console.log("verificationData.data.amount === expectedAmount: ",verificationData.data.amount === expectedAmount)
+    // console.log("verificationData.code === 200000 && verificationData.data.amount === expectedAmount: ", verificationData.code === "200000" && verificationData.data.amount === expectedAmount)
+    if(verificationData.code === "200000" && verificationData.data.amount === expectedAmount){
+      isVerified = true
+    } else {
+      isVerified = false
+    }
+    
 
     if (isVerified) {
       const result: SlipVerificationResult = {
         success: true,
         amount: expectedAmount,
         timestamp: new Date().toISOString(),
-        transactionId: `TXN${Date.now()}${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
         message: "Payment verified successfully",
       }
 

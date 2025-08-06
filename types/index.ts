@@ -31,12 +31,6 @@ export interface BookingRequest {
   duration: number // total duration in minutes
 }
 
-export interface BookingResponse {
-  success: boolean
-  bookingId?: string
-  message: string
-  paymentUrl?: string
-}
 
 export interface ScheduleData {
   date: string

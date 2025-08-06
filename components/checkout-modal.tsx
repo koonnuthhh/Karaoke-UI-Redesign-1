@@ -4,8 +4,11 @@ import type React from "react"
 import { useState } from "react"
 import { X, Upload, Check, AlertCircle, Loader2 } from "lucide-react"
 import { LoadingSpinner } from "../components/ui/loading-spinner"
-import { BookingRequest, BookingResponse } from "types"
+import { BookingRequest } from "types"
+import { BrowserQRCodeReader } from "@zxing/browser"
+
 import { siteConfig } from "config/site-config"
+import { tr } from "date-fns/locale"
 
 interface CheckoutModalProps {
   isOpen: boolean
@@ -30,6 +33,26 @@ interface SlipVerificationResult {
   message: string
 }
 
+async function decodeSlipQR(slipFile: File) {
+  const reader = new BrowserQRCodeReader()
+
+  const imageUrl = URL.createObjectURL(slipFile)
+  const img = new Image()
+  img.src = imageUrl
+
+  return new Promise<string>((resolve, reject) => {
+    img.onload = async () => {
+      try {
+        const result = await reader.decodeFromImageElement(img)
+        resolve(result.getText()) // ✅ this is your QR content
+      } catch (err) {
+        reject("Failed to decode QR")
+      }
+    }
+    img.onerror = () => reject("Failed to load image")
+  })
+}
+
 export function CheckoutModal({ isOpen, onClose, bookingData }: CheckoutModalProps) {
   const [currentStep, setCurrentStep] = useState<CheckoutStep>("booking")
   const [paymentData, setPaymentData] = useState<PaymentData | null>(null)
@@ -46,25 +69,28 @@ export function CheckoutModal({ isOpen, onClose, bookingData }: CheckoutModalPro
     try {
       // Step 1: Submit booking request
       //console.log("bookingData: ",bookingData)
+      console.log("bookingData: ", bookingData)
       const response = await fetch("/api/bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(bookingData),
       })
 
-      const result: BookingResponse = await response.json()
-
-      if (result.success && result.bookingId) {
+      const result = await response.json()
+      console.log("This is what we get from /api/bookings: ", result)
+      console.log("Result.success: ", result.success)
+      console.log("result.data.booking_id: ", result.data.booking_id)
+      if (result.success && result.data.booking_id) {
         // Step 2: Generate QR code for payment
-        const promptPayNumber = siteConfig.payment.promptPayNumber // Replace with actual PromptPay number
+        const promptPayNumber = siteConfig.payment.promptPayNumber
         const qrCodeUrl = `https://promptpay.io/${promptPayNumber}/${bookingData.totalPrice}`
-        console.log('qrCodeUrl: ',qrCodeUrl)
+        console.log('qrCodeUrl: ', qrCodeUrl)
 
         setPaymentData({
           qrCodeUrl,
           promptPayNumber,
           amount: bookingData.totalPrice,
-          bookingId: result.bookingId,
+          bookingId: result.data.booking_id,
         })
 
         setCurrentStep("payment")
@@ -72,7 +98,7 @@ export function CheckoutModal({ isOpen, onClose, bookingData }: CheckoutModalPro
         setError(result.message || "Failed to create booking")
       }
     } catch (err) {
-      setError("Network error. Please try again.")
+      setError("Network error or Someone has booked This time already. Please reload and try again ")
     } finally {
       setIsLoading(false)
     }
@@ -107,34 +133,48 @@ export function CheckoutModal({ isOpen, onClose, bookingData }: CheckoutModalPro
 
   const handleSlipVerification = async () => {
     if (!slipFile || !paymentData) return
-
     setIsLoading(true)
     setError("")
-
+    // console.log("Pass")
     try {
-      // Create FormData for file upload
-      const formData = new FormData()
-      formData.append("slip", slipFile)
-      formData.append("bookingId", paymentData.bookingId)
-      formData.append("expectedAmount", paymentData.amount.toString())
-
-      // Step 3: Upload and verify slip
+      const qrText = await decodeSlipQR(slipFile)
       const response = await fetch("/api/verify-slip", {
         method: "POST",
-        body: formData,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          bookingId: paymentData.bookingId,
+          expectedAmount: paymentData.amount,
+          decodedQR: qrText,
+        }),
       })
-
+      //console.log("paymentData: ",paymentData)
       const result: SlipVerificationResult = await response.json()
 
       if (result.success) {
-        setVerificationResult(result)
-        setCurrentStep("success")
+        const booked_response = await fetch("/api/bookings", {
+          method: "PUT",
+          body: JSON.stringify({
+            booking_id: paymentData.bookingId,
+            booking_status: "booked"
+          })
+        })
+        const booked_result = await booked_response.json()
+        console.log("booked_result.success: ", booked_result.success)
+        if (booked_result.success) {
+
+          setVerificationResult(result)
+          setCurrentStep("success")
+        }
+        // setError(result.message || "Booking to server failed: Please try again or contact support")
+        // setCurrentStep("slip-upload")
       } else {
         setError(result.message || "Payment verification failed")
         setCurrentStep("slip-upload")
       }
     } catch (err) {
-      setError("Failed to verify payment slip. Please try again.")
+      setError("Failed to verify payment slip. Please try again or crop out the QR section in your slip.")
       setCurrentStep("slip-upload")
     } finally {
       setIsLoading(false)
@@ -152,14 +192,18 @@ export function CheckoutModal({ isOpen, onClose, bookingData }: CheckoutModalPro
             <span className="font-medium">Date:</span> {new Date(bookingData.date).toLocaleDateString()}
           </p>
           <p>
-            <span className="font-medium">Time Slots:</span> {bookingData.timeSlots.length} slots (
-            {bookingData.duration} minutes)
+            <span className="font-medium">Time: </span>
+            {bookingData.timeSlots[0]} - {bookingData.timeSlots[1]}
+          </p>
+          <p>
+            <span className="font-medium">Duration: </span>
+            {bookingData.duration} minutes
           </p>
           <p>
             <span className="font-medium">Customer:</span> {bookingData.customerName}
           </p>
           <p>
-            <span className="font-medium">Email:</span> {bookingData.customerEmail}
+            <span className="font-medium">Email:</span> {bookingData.customerEmail || "None"}
           </p>
           <p>
             <span className="font-medium">Phone:</span> {bookingData.customerPhone}
@@ -345,6 +389,7 @@ export function CheckoutModal({ isOpen, onClose, bookingData }: CheckoutModalPro
         </div>
         <h2 className="text-2xl font-bold text-gray-900 mb-2">Booking Confirmed!</h2>
         <p className="text-gray-600">Your payment has been verified and your booking is confirmed.</p>
+        
       </div>
 
       {verificationResult && paymentData && (
@@ -355,10 +400,10 @@ export function CheckoutModal({ isOpen, onClose, bookingData }: CheckoutModalPro
               <span>Booking ID:</span>
               <span className="font-mono">{paymentData.bookingId}</span>
             </div>
-            <div className="flex justify-between">
+            {/* <div className="flex justify-between">
               <span>Transaction ID:</span>
               <span className="font-mono">{verificationResult.transactionId}</span>
-            </div>
+            </div> */}
             <div className="flex justify-between">
               <span>Amount Paid:</span>
               <span>฿{verificationResult.amount.toFixed(2)}</span>
@@ -376,6 +421,10 @@ export function CheckoutModal({ isOpen, onClose, bookingData }: CheckoutModalPro
               <span>{new Date(bookingData.date).toLocaleDateString()}</span>
             </div>
             <div className="flex justify-between">
+              <span>Time: </span>
+              <span>{bookingData.timeSlots[0]} - {bookingData.timeSlots[1]}</span>
+            </div>
+            <div className="flex justify-between">
               <span>Duration:</span>
               <span>{bookingData.duration} minutes</span>
             </div>
@@ -384,7 +433,8 @@ export function CheckoutModal({ isOpen, onClose, bookingData }: CheckoutModalPro
       )}
 
       <div className="space-y-3">
-        <p className="text-sm text-gray-600">A confirmation email has been sent to {bookingData.customerEmail}</p>
+        {/* <p className="text-sm text-gray-600">A confirmation email has been sent to {bookingData.customerEmail}</p> */}
+        <p className="text-red-600">Don't forget to capture this screen!!</p>
         <button
           onClick={onClose}
           className="w-full px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"

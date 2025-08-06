@@ -15,7 +15,7 @@ export function DateSelector({ selectedDate, onDateChange }: DateSelectorProps) 
   const maxDateString = maxDate.toISOString().split("T")[0]
 
   return (
-    <div className="flex items-center gap-3 mb-6">
+    <div className="flex items-center gap-3">
       <Calendar className="w-5 h-5 text-purple-600" />
       <label htmlFor="date-select" className="text-sm font-medium text-gray-700">
         Select Date:
@@ -23,7 +23,7 @@ export function DateSelector({ selectedDate, onDateChange }: DateSelectorProps) 
       <input
         id="date-select"
         type="date"
-        value={selectedDate}
+        value={selectedDate ?? ""}
         min={today}
         max={maxDateString}
         onChange={(e) => onDateChange(e.target.value)}

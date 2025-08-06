@@ -69,8 +69,10 @@ export const siteConfig = {
   // Text Content
   content: {
     hero: {
-      title: "This could be use for Title of promotion",
-      subtitle: "This could be use for detail!",
+      // title: "This could be use for Title of promotion",
+      // subtitle: "This could be use for detail!",
+      title: "",
+      subtitle: "",
     },
     booking: {
       modalTitle: "Book Your Karaoke Session",

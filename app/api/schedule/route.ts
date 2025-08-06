@@ -47,12 +47,12 @@ export async function GET(request: NextRequest) {
       },
     )
     const rawResponseroomdata = await responseroomdata.json()
-    console.log("rawResponseroomdata : ", rawResponseroomdata)
+    //console.log("rawResponseroomdata : ", rawResponseroomdata)
     const roomData = rawResponseroomdata.data || []
     console.log("Fetched Rooms:", roomData.length)
     //console.log("Fetched RoomID:", roomData.room_id)
     const responsebooked = await fetch(
-      `${siteConfig.api.apipath}/user/bookings/date/${date}`,
+      `${siteConfig.api.apipath}/booking/date/${date}`,
       {
         method: "GET",
         headers: {
@@ -92,6 +92,9 @@ export async function GET(request: NextRequest) {
 
           // Skip if room ID doesn't match
           if (b.room_id !== room.room_id) return false
+
+          //Skip if the status is cancelled
+          if (b.status === "cancelled") return false
 
           // Skip if booking is not from current date or next date
           //console.log("Booking date:", b.date, "Current date:", date, "Next date:", nextDate);

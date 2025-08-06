@@ -343,13 +343,13 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
 
               <div>
                 <label htmlFor="customerEmail" className="block text-sm font-medium text-gray-700 mb-1">
-                  Email Address *
+                  Email Address 
                 </label>
                 <input
                   type="email"
                   id="customerEmail"
                   name="customerEmail"
-                  required
+                  // required
                   value={formData.customerEmail}
                   onChange={handleInputChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"

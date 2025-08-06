@@ -1,5 +1,5 @@
 import { siteConfig } from "../config/site-config"
-import type { BookingRequest, BookingResponse, ScheduleData } from "../types"
+import type { BookingRequest, ScheduleData } from "../types"
 
 class ApiClient {
   private baseUrl: string
@@ -48,17 +48,6 @@ class ApiClient {
 
   async getSchedule(date: string): Promise<ScheduleData> {
     return this.request<ScheduleData>(`${siteConfig.api.endpoints.schedule}?date=${date}`)
-  }
-
-  async createBooking(booking: BookingRequest): Promise<BookingResponse> {
-    return this.request<BookingResponse>(siteConfig.api.endpoints.bookings, {
-      method: "POST",
-      body: JSON.stringify(booking),
-    })
-  }
-
-  async getRooms() {
-    return this.request(siteConfig.api.endpoints.rooms)
   }
 }
 
