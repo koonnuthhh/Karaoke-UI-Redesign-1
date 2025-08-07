@@ -10,6 +10,9 @@ export const metadata: Metadata = {
   title: `${siteConfig.business.name} - ${siteConfig.business.tagline}`,
   description: `Book your karaoke room at ${siteConfig.business.name}. ${siteConfig.content.hero.subtitle}`,
   keywords: "karaoke, booking, rooms, entertainment, singing, party",
+  icons: {
+    icon: "/favicon.ico", // ✅ Adjust the path and format if needed
+  }
 }
 
 export default function RootLayout({

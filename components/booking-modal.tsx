@@ -16,9 +16,10 @@ interface BookingModalProps {
   timeSlot: TimeSlot
   room: Room
   scheduleData: ScheduleData
+  isAdmin: boolean
 }
 
-export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: BookingModalProps) {
+export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData, isAdmin }: BookingModalProps) {
   const [startTime, setStartTime] = useState(timeSlot.startTime)
   const [endTime, setEndTime] = useState("")
 

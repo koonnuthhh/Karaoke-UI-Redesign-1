@@ -1,15 +1,15 @@
 export const siteConfig = {
   // Business Information
   business: {
-    name: "Alumfia Karaoke",
+    name: "Alurfia Karaoke",
     tagline: "Be Your Perfect Karaoke Experience",
-    phone: "+1 (555) 123-4567",
+    phone: "0945945564",
     email: "bookings@harmonykaraoke.com",
     address: "123 Music Street, Entertainment District",
   },
 
   payment: {
-    promptPayNumber: "0957742547", 
+    promptPayNumber: "0945945564", 
     currency: "THB",
   },
 
@@ -62,7 +62,7 @@ export const siteConfig = {
     roomavailable: "rgb(43, 170, 243)",
     roomavailableHover: "rgb(23, 126, 145)",
     roompending: "rgba(88, 233, 31, 1)", // red-400
-    roombooked:"rgba(253, 18, 18, 1)",
+    roombooked:"rgba(255, 129, 129, 1)",
     roomclosed:"rgb(150,150,150)"
   },
 

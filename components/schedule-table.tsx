@@ -5,69 +5,85 @@ import { siteConfig } from "../config/site-config"
 import type { ScheduleData, TimeSlot } from "../types"
 import { LoadingSpinner } from "../components/ui/loading-spinner"
 import { BookingModal } from "../components/booking-modal"
-import { ca } from "date-fns/locale"
+import { ca, sl } from "date-fns/locale"
 
+// Corrected interface for the ScheduleTable props
 interface ScheduleTableProps {
   scheduleData: ScheduleData
   isLoading?: boolean
+  isAdmin?: boolean // Added isAdmin prop
   handleRefresh: () => void
 }
 
 
 
-function getSlotStyles(slot: TimeSlot): string {
-  const status = slot.status
-  const baseStyles =
-    "p-2 text-center text-sm border rounded cursor-pointer transition-colors duration-200 select-none"
 
-  switch (status) {
-    case "booked":
-      return `${baseStyles} ${siteConfig.theme.maintext} border-red-200 cursor-not-allowed`
-    case "closed":
-      return `${baseStyles} ${siteConfig.theme.maintext} border-gray-200 cursor-not-allowed`
-    case "cancelled":
-      return `${baseStyles} ${siteConfig.theme.maintext} border-green-200`
-    case "available":
-      return `${baseStyles} ${siteConfig.theme.maintext} border-green-200`
-    case "pending":
-      return `${baseStyles} ${siteConfig.theme.maintext} border-yellow-200 cursor-not-allowed`
-    default:
-      return baseStyles
-  }
-}
-
-function getSlotColor(slot: TimeSlot, isHover: boolean): string {
-  const status = slot.status
-
-  switch (status) {
-    case "booked":
-      return siteConfig.theme.roombooked
-    case "cancelled":
-      return isHover
-        ? siteConfig.theme.roomavailableHover
-        : siteConfig.theme.roomavailable
-    case "closed":
-      return siteConfig.theme.roomclosed
-    case "pending":
-      return siteConfig.theme.roompending
-    case "available":
-      return isHover
-        ? siteConfig.theme.roomavailableHover
-        : siteConfig.theme.roomavailable
-    default:
-      return siteConfig.theme.roomclosed
-  }
-}
-
+// SlotCell component now accepts the isAdmin prop
 function SlotCell({
   slot,
   onClick,
+  isAdmin
 }: {
   slot: TimeSlot
   onClick: (slot: TimeSlot) => void
+  isAdmin: boolean // Added isAdmin to SlotCell props
 }) {
   const [isHover, setIsHover] = useState(false)
-  //console.log("Slot status: ", slot.status)
+  // if(slot.status === "booked"){
+  //   console.log("booked slot: ",slot)
+  // }
+  // Function to get styles for the slot
+  function getSlotStyles(slot: TimeSlot): string {
+    const status = slot.status
+    const baseStyles =
+      "p-2 text-center text-sm border rounded cursor-pointer transition-colors duration-200 select-none"
+
+    switch (status) {
+      case "booked":
+        // For admin, booked slots are clickable to see details
+        if (isAdmin) {
+            return `${baseStyles} ${siteConfig.theme.maintext} border-red-200 cursor-pointer`
+        }
+        return `${baseStyles} ${siteConfig.theme.maintext} border-red-200 cursor-not-allowed`
+      case "closed":
+        return `${baseStyles} ${siteConfig.theme.maintext} border-gray-200 cursor-not-allowed`
+      case "cancelled":
+        return `${baseStyles} ${siteConfig.theme.maintext} border-green-200`
+      case "available":
+        return `${baseStyles} ${siteConfig.theme.maintext} border-green-200`
+      case "pending":
+        // Admin can click pending to manage it, regular users can't
+        if (isAdmin) {
+             return `${baseStyles} ${siteConfig.theme.maintext} border-yellow-200 cursor-pointer`
+        }
+        return `${baseStyles} ${siteConfig.theme.maintext} border-yellow-200 cursor-not-allowed`
+      default:
+        return baseStyles
+    }
+  }
+
+  // Function to get slot background color
+  function getSlotColor(slot: TimeSlot, isHover: boolean): string {
+    const status = slot.status
+    switch (status) {
+      case "booked":
+        return siteConfig.theme.roombooked
+      case "cancelled":
+        return isHover
+          ? siteConfig.theme.roomavailableHover
+          : siteConfig.theme.roomavailable
+      case "closed":
+        return siteConfig.theme.roomclosed
+      case "pending":
+        return siteConfig.theme.roompending
+      case "available":
+        return isHover
+          ? siteConfig.theme.roomavailableHover
+          : siteConfig.theme.roomavailable
+      default:
+        return siteConfig.theme.roomclosed
+    }
+  }
 
   return (
     <td
@@ -78,39 +94,46 @@ function SlotCell({
       <div
         className={getSlotStyles(slot)}
         style={{ background: getSlotColor(slot, isHover) }}
-        onClick={() => (slot.status === "available" || slot.status === "cancelled") && onClick(slot)}
+        // Added isAdmin check for clickability of booked and pending slots
+        onClick={() => {
+          if (isAdmin) {
+             onClick(slot)
+          } else {
+            (slot.status === "available" || slot.status === "cancelled") && onClick(slot)
+          }
+        }}
       >
         {slot.status === "booked" ? (
           <div>
-            <div className="font-medium">Booked</div>
-            {/* {slot.customerName && (
-              <div className="text-xs">{slot.customerName}</div>
-            )} */}
+            {/* Conditional rendering: show customer name if admin, otherwise show "Booked" */}
+            <div className="font-medium">{isAdmin && slot.customerName ? slot.customerName : "Booked"}</div>
+            {isAdmin && slot.customerName && (
+              <div className="text-xs text-red-700">Booked</div>
+            )}
           </div>
         ) : slot.status === "available" ? (
           <div>
             <div className="font-medium cursor-pointer">Available</div>
             {/* <div className="text-xs">${slot.price}</div> */}
           </div>
-        )
-          : slot.status === "cancelled" ? (
-            <div>
-              <div className="font-medium cursor-pointer">Available</div>
-              {/* <div className="text-xs">${slot.price}</div> */}
-            </div>
-          ) : slot.status === "pending" ? (
-            <div>
-              <div className="font-medium">Pending</div>
-            </div>
-          ) : (
-            <div className="font-medium">Closed</div>
-          )}
+        ) : slot.status === "cancelled" ? (
+          <div>
+            <div className="font-medium cursor-pointer">Available</div>
+            {/* <div className="text-xs">${slot.price}</div> */}
+          </div>
+        ) : slot.status === "pending" ? (
+          <div>
+            <div className="font-medium">Pending</div>
+          </div>
+        ) : (
+          <div className="font-medium">Closed</div>
+        )}
       </div>
     </td>
   )
 }
 
-export function ScheduleTable({ scheduleData, isLoading, handleRefresh }: ScheduleTableProps) {
+export function ScheduleTable({ scheduleData, isLoading, isAdmin = false, handleRefresh }: ScheduleTableProps) {
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
 
@@ -172,7 +195,6 @@ export function ScheduleTable({ scheduleData, isLoading, handleRefresh }: Schedu
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {scheduleData.timeSlots.slice(0, -1).map((timeSlot) => (
-
                 <tr key={timeSlot} className="hover:bg-gray-50">
                   <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
                     {timeSlot}
@@ -206,6 +228,7 @@ export function ScheduleTable({ scheduleData, isLoading, handleRefresh }: Schedu
                         key={`${room.room_id}-${timeSlot}`}
                         slot={slot}
                         onClick={handleSlotClick}
+                        isAdmin={isAdmin} // Pass the isAdmin prop down
                       />
                     )
                   })}
@@ -260,6 +283,7 @@ export function ScheduleTable({ scheduleData, isLoading, handleRefresh }: Schedu
           timeSlot={selectedSlot}
           room={scheduleData.rooms.find((r) => r.room_id === selectedSlot.roomId)!}
           scheduleData={scheduleData}
+          isAdmin={isAdmin}
         />
       )}
     </>
