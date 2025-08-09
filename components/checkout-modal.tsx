@@ -7,8 +7,6 @@ import { LoadingSpinner } from "../components/ui/loading-spinner"
 import { BookingRequest } from "types"
 
 import { siteConfig } from "config/site-config"
-import { tr } from "date-fns/locale"
-
 interface CheckoutModalProps {
   isOpen: boolean
   onClose: () => void

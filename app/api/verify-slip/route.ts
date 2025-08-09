@@ -29,7 +29,7 @@ export async function POST(req: Request) {
     }
 
     // Optional: wait 45 seconds
-    await new Promise((r) => setTimeout(r, 45000));
+    //await new Promise((r) => setTimeout(r, 45000));
 
     // Send slip image to verification API
     const uploadForm = new FormData();
