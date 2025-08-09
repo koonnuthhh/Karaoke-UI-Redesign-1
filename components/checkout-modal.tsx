@@ -69,7 +69,7 @@ export function CheckoutModal({ isOpen, onClose, bookingData }: CheckoutModalPro
     try {
       // Step 1: Submit booking request
       //console.log("bookingData: ",bookingData)
-      console.log("bookingData: ", bookingData)
+      // console.log("bookingData: ", bookingData)
       const response = await fetch("/api/bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -77,9 +77,6 @@ export function CheckoutModal({ isOpen, onClose, bookingData }: CheckoutModalPro
       })
 
       const result = await response.json()
-      console.log("This is what we get from /api/bookings: ", result)
-      console.log("Result.success: ", result.success)
-      console.log("result.data.booking_id: ", result.data.booking_id)
       if (result.success && result.data.booking_id) {
         // Step 2: Generate QR code for payment
         const promptPayNumber = siteConfig.payment.promptPayNumber
@@ -161,7 +158,7 @@ export function CheckoutModal({ isOpen, onClose, bookingData }: CheckoutModalPro
           })
         })
         const booked_result = await booked_response.json()
-        console.log("booked_result.success: ", booked_result.success)
+        //console.log("booked_result.success: ", booked_result.success)
         if (booked_result.success) {
 
           setVerificationResult(result)

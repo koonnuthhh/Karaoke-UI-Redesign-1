@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
     const date = searchParams.get("date") || new Date().toISOString().split("T")[0]
 
     const responseroomdata = await fetch(
-      `${siteConfig.api.apipath}/admin/rooms`,
+      `${process.env.API_PATH}/admin/rooms`,
       {
         method: "GET",
         headers: {
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
     console.log("Fetched Rooms:", roomData.length)
     //console.log("Fetched RoomID:", roomData.room_id)
     const responsebooked = await fetch(
-      `${siteConfig.api.apipath}/booking/date/${date}`,
+      `${process.env.API_PATH}/booking/date/${date}`,
       {
         method: "GET",
         headers: {
@@ -131,6 +131,7 @@ export async function GET(request: NextRequest) {
           endTime,
           status: status,
           customerName: undefined,
+          customerID: realBooking?.user_id,
           price: realBooking?.price ?? room.price_per_half_hour,
           duration: siteConfig.schedule.slotDuration,
         } as TimeSlot

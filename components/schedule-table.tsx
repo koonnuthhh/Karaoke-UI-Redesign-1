@@ -5,7 +5,7 @@ import { siteConfig } from "../config/site-config"
 import type { ScheduleData, TimeSlot } from "../types"
 import { LoadingSpinner } from "../components/ui/loading-spinner"
 import { BookingModal } from "../components/booking-modal"
-import { ca, sl } from "date-fns/locale"
+import { AdminBookingModal } from "../components/admin-booking-modal"
 
 // Corrected interface for the ScheduleTable props
 interface ScheduleTableProps {
@@ -42,7 +42,7 @@ function SlotCell({
       case "booked":
         // For admin, booked slots are clickable to see details
         if (isAdmin) {
-            return `${baseStyles} ${siteConfig.theme.maintext} border-red-200 cursor-pointer`
+          return `${baseStyles} ${siteConfig.theme.maintext} border-red-200 cursor-pointer`
         }
         return `${baseStyles} ${siteConfig.theme.maintext} border-red-200 cursor-not-allowed`
       case "closed":
@@ -54,7 +54,7 @@ function SlotCell({
       case "pending":
         // Admin can click pending to manage it, regular users can't
         if (isAdmin) {
-             return `${baseStyles} ${siteConfig.theme.maintext} border-yellow-200 cursor-pointer`
+          return `${baseStyles} ${siteConfig.theme.maintext} border-yellow-200 cursor-pointer`
         }
         return `${baseStyles} ${siteConfig.theme.maintext} border-yellow-200 cursor-not-allowed`
       default:
@@ -97,7 +97,7 @@ function SlotCell({
         // Added isAdmin check for clickability of booked and pending slots
         onClick={() => {
           if (isAdmin) {
-             onClick(slot)
+            (slot.status != "pending") && onClick(slot)
           } else {
             (slot.status === "available" || slot.status === "cancelled") && onClick(slot)
           }
@@ -273,18 +273,32 @@ export function ScheduleTable({ scheduleData, isLoading, isAdmin = false, handle
       </div>
 
       {selectedSlot && (
-        <BookingModal
-          isOpen={isModalOpen}
-          onClose={() => {
-            setIsModalOpen(false)
-            setSelectedSlot(null)
-            handleRefresh()
-          }}
-          timeSlot={selectedSlot}
-          room={scheduleData.rooms.find((r) => r.room_id === selectedSlot.roomId)!}
-          scheduleData={scheduleData}
-          isAdmin={isAdmin}
-        />
+        isAdmin ? (
+          <AdminBookingModal
+            isOpen={isModalOpen}
+            onClose={() => {
+              setIsModalOpen(false)
+              setSelectedSlot(null)
+              handleRefresh()
+            }}
+            timeSlot={selectedSlot}
+            room={scheduleData.rooms.find((r) => r.room_id === selectedSlot.roomId)!}
+            scheduleData={scheduleData}
+          />
+        ) : (
+          <BookingModal
+            isOpen={isModalOpen}
+            onClose={() => {
+              setIsModalOpen(false)
+              setSelectedSlot(null)
+              handleRefresh()
+            }}
+            timeSlot={selectedSlot}
+            room={scheduleData.rooms.find((r) => r.room_id === selectedSlot.roomId)!}
+            scheduleData={scheduleData}
+            isAdmin={false}
+          />
+        )
       )}
     </>
   )

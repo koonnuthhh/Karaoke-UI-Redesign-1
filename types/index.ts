@@ -15,6 +15,7 @@ export interface TimeSlot {
   endTime: string
   status: string
   customerName?: string
+  customerID: string
   price?: number
   duration: number // in minutes
 }

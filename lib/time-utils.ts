@@ -25,10 +25,10 @@ export function generateTimeSlots(startTime: string, endTime: string, slotDurati
 export function calculatePrice(baseRate: number, duration: number, isPeakTime = false): number {
   const hours = duration / 60
   const decrementPerHour = 10
-  const basePrice = 200
+  const basePrice = baseRate*2
   let hourlyRate = basePrice
 
-  console.log("hour: ",hours)
+  //console.log("hour: ",hours)
    if (hours  <= 1) {
     //return hourlyRate
   } else if (hours <= 2) {
@@ -40,7 +40,7 @@ export function calculatePrice(baseRate: number, duration: number, isPeakTime = 
   }
 
   const total = hourlyRate*hours
-  console.log("total: ",total)
+  //console.log("total: ",total)
 
   return isPeakTime ? total * 1.5 : total
 }
