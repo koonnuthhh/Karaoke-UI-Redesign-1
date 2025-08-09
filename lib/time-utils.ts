@@ -40,7 +40,7 @@ export function calculatePrice(baseRate: number, duration: number, isPeakTime = 
     hourlyRate += 100
   }
 
-  const total = hourlyRate * hours
+  const total = hourlyRate * Math.floor(hours)
   //console.log("total: ",total)
 
   return isPeakTime ? total * 1.5 : total
