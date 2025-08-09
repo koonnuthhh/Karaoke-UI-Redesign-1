@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
     const userId = request.headers.get("userId")
     //console.log(userId)
 
-    const response = await fetch(`${siteConfig.api.apipath}/user/${userId}`, {
+    const response = await fetch(`${process.env.API_PATH}/user/${userId}`, {
       method: 'GET',
       headers: {
         apikey: `${process.env.API_KEY}`,

@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Missing required booking information" }, { status: 400 })
     }
 
-    const USER = await fetch(`${siteConfig.api.apipath}/user/`, {
+    const USER = await fetch(`${process.env.API_PATH}/user/`, {
       method: 'POST',
       headers: {
         apikey: `${process.env.API_KEY}`,
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     //     }
     //   }))
 
-    const response = await fetch(`${siteConfig.api.apipath}/booking`, {
+    const response = await fetch(`${process.env.API_PATH}/booking`, {
       method: 'POST',
       headers: {
         apikey: `${process.env.API_KEY}`,
@@ -75,7 +75,7 @@ export async function PUT(request: NextRequest) {
     // console.log("bookingstatus.booking_status: ",bookingstatus.booking_status)
     // console.log("bookingstatus.booking_id: ",bookingstatus.booking_id)
 
-    const response = await fetch(`${siteConfig.api.apipath}/booking/${bookingstatus.booking_id}`, {
+    const response = await fetch(`${process.env.API_PATH}/booking/${bookingstatus.booking_id}`, {
       method: 'PUT',
       headers: {
         apikey: `${process.env.API_KEY}`,
