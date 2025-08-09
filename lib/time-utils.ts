@@ -8,7 +8,7 @@ export function generateTimeSlots(startTime: string, endTime: string, slotDurati
 
   // Handle overnight hours (e.g., until 03:00 next day)
   if (end < start) {
-     end.setDate(end.getDate() + 1)
+    end.setDate(end.getDate() + 1)
   }
 
   const current = new Date(start)
@@ -25,21 +25,22 @@ export function generateTimeSlots(startTime: string, endTime: string, slotDurati
 export function calculatePrice(baseRate: number, duration: number, isPeakTime = false): number {
   const hours = duration / 60
   const decrementPerHour = 10
-  const basePrice = baseRate*2
+  const basePrice = baseRate * 2
   let hourlyRate = basePrice
 
-  //console.log("hour: ",hours)
-   if (hours  <= 1) {
-    //return hourlyRate
-  } else if (hours <= 2) {
-    hourlyRate = basePrice - (decrementPerHour*1)
+  if (hours > 1 && hours <= 2) {
+    hourlyRate -= decrementPerHour
   } else if (hours <= 3) {
-    hourlyRate = basePrice - (decrementPerHour*2)
-  } else {
-    hourlyRate = basePrice - (decrementPerHour*3)
+    hourlyRate -= decrementPerHour * 2
+  } else if (hours > 3) {
+    hourlyRate -= decrementPerHour * 3
   }
 
-  const total = hourlyRate*hours
+  if (!Number.isInteger(hours)) {
+    hourlyRate += 100
+  }
+
+  const total = hourlyRate * hours
   //console.log("total: ",total)
 
   return isPeakTime ? total * 1.5 : total
