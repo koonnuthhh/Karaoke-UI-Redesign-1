@@ -51,6 +51,8 @@ export async function POST(request: NextRequest) {
     // console.log("verificationData.code === 200000: ",verificationData.code === "200000")
     // console.log("verificationData.data.amount === expectedAmount: ",verificationData.data.amount === expectedAmount)
     // console.log("verificationData.code === 200000 && verificationData.data.amount === expectedAmount: ", verificationData.code === "200000" && verificationData.data.amount === expectedAmount)
+
+    // const verificationData.data.dateTime
     if(verificationData.code === "200000" && verificationData.data.amount === expectedAmount){
       isVerified = true
     } else {
@@ -74,7 +76,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message: "Could not verify payment. Please check your slip and try again.",
+          message: "Could not verify payment. Please wait 1-2 minutes and try again.",
         },
         { status: 400 },
       )
