@@ -17,7 +17,7 @@ export const siteConfig = {
 
   // Schedule Configuration
   schedule: {
-    maximumPrebook: 60,
+    maximumPrebook: 30,
     slotDuration: 30, // minutes
     openTime: "10:00",
     closeTime: "01:00",

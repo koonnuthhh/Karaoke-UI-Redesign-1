@@ -1,65 +1,66 @@
-import { type NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server";
 
 interface SlipVerificationResult {
-  success: boolean
-  amount: number
-  timestamp: string
-  message: string
+  success: boolean;
+  amount: number;
+  timestamp: string;
+  message: string;
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(req: Request) {
   try {
-    const qrData = await request.json()
-    const slip = qrData.decodedQR
-    const bookingId = qrData.bookingId
-    const expectedAmount = qrData.expectedAmount
+    const formData = await req.formData();
 
-    if (!slip || !bookingId || !expectedAmount) {
-      return NextResponse.json({ success: false, message: "Missing required fields" }, { status: 400 })
+    const bookingId = formData.get("bookingId")?.toString();
+    const expectedAmount = Number(formData.get("expectedAmount"));
+    const slipFile = formData.get("slipFile");
+
+    if (!(slipFile instanceof File)) {
+      // It's not a file
+      return NextResponse.json({ success: false, message: "Slip file is not a valid file" }, { status: 400 });
     }
 
-    // In production, replace with actual slip verification API
-    // Example: Thai QR Payment slip verification service
-    await new Promise(r => setTimeout(r, 45000))
-    const verificationResponse = await fetch(`${process.env.SLIP_VERIFY_API_URL}/api/verify-slip/qr-code/info`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.SLIP_VERIFY_SECRET_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        payload: {
-          qrCode: slip, // this should be the decoded string from QR
-          // checkCondition: {
-          //   // checkDuplicate : true
-          //   checkReceiver: [{
-          //     accountType: "01002",
-          //     accountNameTH: "กฤตภาส เฉลิมพงษ์"
-          //   }],
-          //   checkAmount: {
-          //     type: "eq", // eq, gte, lte
-          //     amount: expectedAmount
-          //   },
-          // }
-        }
-      }),
-    })
 
-    const verificationData = await verificationResponse.json()
-    //console.log("verificationData: ", verificationData)
-
-    let isVerified
-    // console.log("verificationData.code === 200000: ",verificationData.code === "200000")
-    // console.log("verificationData.data.amount === expectedAmount: ",verificationData.data.amount === expectedAmount)
-    // console.log("verificationData.code === 200000 && verificationData.data.amount === expectedAmount: ", verificationData.code === "200000" && verificationData.data.amount === expectedAmount)
-
-    // const verificationData.data.dateTime
-    if(verificationData.code === "200000" && verificationData.data.amount === expectedAmount){
-      isVerified = true
-    } else {
-      isVerified = false
+    if (!slipFile || !bookingId || !expectedAmount) {
+      return NextResponse.json(
+        { success: false, message: "Missing required fields" },
+        { status: 400 }
+      );
     }
-    
+
+    // Optional: wait 45 seconds
+    await new Promise((r) => setTimeout(r, 45000));
+
+    // Send slip image to verification API
+    const uploadForm = new FormData();
+    uploadForm.append("file", slipFile as File);
+
+    const verificationResponse = await fetch(
+      `${process.env.SLIP_VERIFY_API_URL}/api/verify-slip/qr-image/info`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.SLIP_VERIFY_SECRET_KEY}`,
+        },
+        body: uploadForm,
+      }
+    );
+
+    const verificationData = await verificationResponse.json();
+    // Optional: log file details for debugging
+    // console.log("Slip file type:", slipFile.type);
+    // console.log("Slip file size (bytes):", slipFile.size);
+    // console.log(verificationData)
+    const dateTime = new Date(verificationData.data.dateTime);
+    const now = new Date();
+
+    const isWithinTodayOrTomorrow =dateTime >= new Date(now.getFullYear(), now.getMonth(), now.getDate()) && dateTime < new Date(now.getFullYear(), now.getMonth(), now.getDate() + 2);
+
+
+    const isVerified =
+      verificationData.code === "200000" &&
+      Number(verificationData.data.amount) === expectedAmount &&
+isWithinTodayOrTomorrow
 
     if (isVerified) {
       const result: SlipVerificationResult = {
@@ -67,23 +68,22 @@ export async function POST(request: NextRequest) {
         amount: expectedAmount,
         timestamp: new Date().toISOString(),
         message: "Payment verified successfully",
-      }
-
-      // In production, update booking status in database
-      // await updateBookingStatus(bookingId, 'confirmed', result.transactionId);
-
-      return NextResponse.json(result)
+      };
+      return NextResponse.json(result);
     } else {
       return NextResponse.json(
         {
           success: false,
           message: "Could not verify payment. Please wait 1-2 minutes and try again.",
         },
-        { status: 400 },
-      )
+        { status: 400 }
+      );
     }
   } catch (error) {
-    console.error("Slip verification error:", error)
-    return NextResponse.json({ success: false, message: "Internal server error during verification" }, { status: 500 })
+    console.error("Slip verification error:", error);
+    return NextResponse.json(
+      { success: false, message: "Internal server error during verification" },
+      { status: 500 }
+    );
   }
 }

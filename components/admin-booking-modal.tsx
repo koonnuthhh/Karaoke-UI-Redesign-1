@@ -191,7 +191,6 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
             }
             onClose()
         } catch (e) {
-            console.log(e.message)
             setError("Network error while creating booking")
         } finally {
             setIsSubmitting(false)
