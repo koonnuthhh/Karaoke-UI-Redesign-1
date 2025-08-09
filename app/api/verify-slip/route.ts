@@ -20,6 +20,7 @@ export async function POST(request: NextRequest) {
 
     // In production, replace with actual slip verification API
     // Example: Thai QR Payment slip verification service
+    await new Promise(r => setTimeout(r, 45000))
     const verificationResponse = await fetch(`${process.env.SLIP_VERIFY_API_URL}/api/verify-slip/qr-code/info`, {
       method: 'POST',
       headers: {

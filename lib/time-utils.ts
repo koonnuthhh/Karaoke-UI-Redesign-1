@@ -44,7 +44,6 @@ export function calculatePrice(baseRate: number, duration: number, isPeakTime = 
 
     //console.log("hour: ",hours)
     if (hours <= 1) {
-      //return hourlyRate
     } else if (hours <= 2) {
       hourlyRate = basePrice - (decrementPerHour * 1)
     } else if (hours <= 3) {
