@@ -5,6 +5,8 @@ import { useState } from "react"
 import { X, Upload, Check, AlertCircle, Loader2 } from "lucide-react"
 import { LoadingSpinner } from "../components/ui/loading-spinner"
 import { BookingRequest } from "types"
+import promptpay from "promptpay-qr"
+import { QRCodeCanvas } from "qrcode.react"
 
 import { siteConfig } from "config/site-config"
 interface CheckoutModalProps {
@@ -16,7 +18,7 @@ interface CheckoutModalProps {
 type CheckoutStep = "booking" | "payment" | "slip-upload" | "verification" | "success"
 
 interface PaymentData {
-  qrCodeUrl: string
+  qrPayload: string
   promptPayNumber: string
   amount: number
   accountName: string
@@ -58,12 +60,13 @@ export function CheckoutModal({ isOpen, onClose, bookingData }: CheckoutModalPro
       if (result.success && result.data.booking_id) {
         // Step 2: Generate QR code for payment
         const promptPayNumber = siteConfig.payment.promptPayNumber
-        const qrCodeUrl = `https://promptpay.io/${promptPayNumber}/${bookingData.totalPrice}`
+        const qrPayload = promptpay(promptPayNumber, { amount: bookingData.totalPrice })
         //console.log('qrCodeUrl: ', qrCodeUrl)
 
         setPaymentData({
-          qrCodeUrl,
+          qrPayload,
           promptPayNumber,
+          accountName: siteConfig.payment.accountName,
           amount: bookingData.totalPrice,
           bookingId: result.data.booking_id,
         })
@@ -107,52 +110,52 @@ export function CheckoutModal({ isOpen, onClose, bookingData }: CheckoutModalPro
   }
 
   const handleSlipVerification = async () => {
-  if (!slipFile || !paymentData) return;
-  setIsLoading(true);
-  setError("");
+    if (!slipFile || !paymentData) return;
+    setIsLoading(true);
+    setError("");
 
-  try {
-    const formData = new FormData();
-    formData.append("bookingId", paymentData.bookingId);
-    formData.append("expectedAmount", paymentData.amount.toString());
-    formData.append("slipFile", slipFile);
+    try {
+      const formData = new FormData();
+      formData.append("bookingId", paymentData.bookingId);
+      formData.append("expectedAmount", paymentData.amount.toString());
+      formData.append("slipFile", slipFile);
 
-    const response = await fetch("/api/verify-slip", {
-      method: "POST",
-      body: formData,
-    });
-
-    const result: SlipVerificationResult = await response.json();
-
-    if (result.success) {
-      const booked_response = await fetch("/api/bookings", {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          booking_id: paymentData.bookingId,
-          booking_status: "booked",
-        }),
+      const response = await fetch("/api/verify-slip", {
+        method: "POST",
+        body: formData,
       });
 
-      const booked_result = await booked_response.json();
+      const result: SlipVerificationResult = await response.json();
 
-      if (booked_result.success) {
-        setVerificationResult(result);
-        setCurrentStep("success");
+      if (result.success) {
+        const booked_response = await fetch("/api/bookings", {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            booking_id: paymentData.bookingId,
+            booking_status: "booked",
+          }),
+        });
+
+        const booked_result = await booked_response.json();
+
+        if (booked_result.success) {
+          setVerificationResult(result);
+          setCurrentStep("success");
+        }
+      } else {
+        setError(result.message || "Payment verification failed");
+        setCurrentStep("slip-upload");
       }
-    } else {
-      setError(result.message || "Payment verification failed");
+    } catch (err) {
+      setError("Failed to verify payment slip. Please try again or crop out the QR section in your slip.");
       setCurrentStep("slip-upload");
+    } finally {
+      setIsLoading(false);
     }
-  } catch (err) {
-    setError("Failed to verify payment slip. Please try again or crop out the QR section in your slip.");
-    setCurrentStep("slip-upload");
-  } finally {
-    setIsLoading(false);
-  }
-};
+  };
 
 
   const renderBookingStep = () => (
@@ -226,11 +229,12 @@ export function CheckoutModal({ isOpen, onClose, bookingData }: CheckoutModalPro
 
       <div className="text-center mb-6">
         <div className="bg-white p-4 rounded-lg border-2 border-dashed border-gray-300 mb-4">
-          {paymentData && (
-            <img
-              src={paymentData.qrCodeUrl || "/placeholder.svg"}
-              alt="PromptPay QR Code"
-              className="mx-auto w-48 h-48 object-contain"
+          {paymentData?.qrPayload && (
+            <QRCodeCanvas
+              value={paymentData.qrPayload}
+              size={256} // Sharp resolution
+              level="H"  // High error correction
+              className="mx-auto"
             />
           )}
         </div>
@@ -252,9 +256,9 @@ export function CheckoutModal({ isOpen, onClose, bookingData }: CheckoutModalPro
           <li>4. Take a screenshot of the payment slip</li>
           <li>5. Upload the slip in the next step</li>
         </ol>
-      <ol className="text-sm font-semibold text-red-900 mb-2">
-        *If you can't scan please transfer money using the promptpay number
-      </ol>
+        <ol className="text-sm font-semibold text-red-900 mb-2">
+          *If you can't scan please transfer money using the promptpay number*
+        </ol>
       </div>
 
       <div className="flex gap-3">
@@ -367,7 +371,7 @@ export function CheckoutModal({ isOpen, onClose, bookingData }: CheckoutModalPro
         </div>
         <h2 className="text-2xl font-bold text-gray-900 mb-2">Booking Confirmed!</h2>
         <p className="text-gray-600">Your payment has been verified and your booking is confirmed.</p>
-        
+
       </div>
 
       {verificationResult && paymentData && (
