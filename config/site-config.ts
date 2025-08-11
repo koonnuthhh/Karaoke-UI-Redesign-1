@@ -9,6 +9,7 @@ export const siteConfig = {
   },
 
   payment: {
+    accountName:"",
     promptPayNumber: "0945945564", 
     currency: "THB",
   },

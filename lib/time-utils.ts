@@ -29,7 +29,7 @@ export function calculatePrice(baseRate: number, duration: number, isPeakTime = 
   let hourlyRate = basePrice
   let total = 0;
   if ((hours * 2) % 2 != 0) {
-    total += 100
+    total += basePrice/2
     hours = hours-0.5
     if (hours <= 1) {
       //return hourlyRate

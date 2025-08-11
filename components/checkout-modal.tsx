@@ -19,6 +19,7 @@ interface PaymentData {
   qrCodeUrl: string
   promptPayNumber: string
   amount: number
+  accountName: string
   bookingId: string
 }
 
@@ -237,6 +238,7 @@ export function CheckoutModal({ isOpen, onClose, bookingData }: CheckoutModalPro
         <div className="space-y-2 text-gray-700">
           <p className="text-lg font-semibold">Amount to Pay: ฿{paymentData?.amount.toFixed(2)}</p>
           <p className="text-sm">PromptPay Number: {paymentData?.promptPayNumber}</p>
+          <p className="text-sm">Account Name: {paymentData?.accountName}</p>
           <p className="text-sm text-gray-500">Booking ID: {paymentData?.bookingId}</p>
         </div>
       </div>
@@ -250,6 +252,9 @@ export function CheckoutModal({ isOpen, onClose, bookingData }: CheckoutModalPro
           <li>4. Take a screenshot of the payment slip</li>
           <li>5. Upload the slip in the next step</li>
         </ol>
+      <ol className="text-sm font-semibold text-red-900 mb-2">
+        *If you can't scan please transfer money using the promptpay number
+      </ol>
       </div>
 
       <div className="flex gap-3">
