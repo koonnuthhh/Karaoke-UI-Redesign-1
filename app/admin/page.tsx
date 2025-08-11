@@ -20,7 +20,7 @@ export default function AdminBookings() {
     setLoading(true)
 
     try {
-      const res = await fetch("https://686ff7bae602.ngrok-free.app/api/admin", {
+      const res = await fetch("/api/admin", {
         method: "GET",
         headers: {
           "username": credentials.username,
