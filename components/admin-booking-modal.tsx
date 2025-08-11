@@ -14,6 +14,7 @@ interface AdminBookingModalProps {
     timeSlot: TimeSlot
     room: Room
     scheduleData: ScheduleData
+    adminCredential: string | null
 }
 interface User {
     username: string
@@ -21,7 +22,7 @@ interface User {
     phone: string
 }
 
-export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: AdminBookingModalProps) {
+export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleData, adminCredential}: AdminBookingModalProps) {
     const [startTime, setStartTime] = useState(timeSlot.startTime)
     const [endTime, setEndTime] = useState("")
     const [formData, setFormData] = useState({
@@ -85,8 +86,9 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                         method: "GET",
                         headers: {
                             "Content-Type": "application/json",
-                            "userId": timeSlot.customerID
-                        },
+                            "userId": timeSlot.customerID,
+                            "credential" : adminCredential? adminCredential: ""
+                        }
                     });
 
                     const userdata = await userraw.json();
@@ -177,7 +179,7 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
             // Step 2: Immediately confirm booking
             const updateRes = await fetch("/api/bookings", {
                 method: "PUT",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", "credential": adminCredential? adminCredential:""},
                 body: JSON.stringify({
                     booking_id: createResult.data.booking_id,
                     booking_status: "booked"
@@ -204,7 +206,7 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
         try {
             const res = await fetch("/api/bookings", {
                 method: "PUT",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", "credential": adminCredential? adminCredential:""},
                 body: JSON.stringify({
                     booking_id: timeSlot.id,
                     booking_status: "cancelled"
@@ -300,7 +302,7 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                                 <p><span className="font-medium">Time:</span> {startTime && endTime ? `${startTime} - ${endTime}` : "Not selected"}</p>
                                 <p><span className="font-medium">Duration:</span> {formatDuration(totalDuration)}</p>
                                 <p><span className="font-medium">Total Price:</span> ฿{totalPrice.toFixed(2)}</p>
-                                <p><span className="font-medium">Capacity:</span> {room.capacity}</p>
+                                {/* <p><span className="font-medium">Capacity:</span> {room.capacity}</p> */}
                             </div>
 
                             {/* Booking Form */}
@@ -309,10 +311,10 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
                                     <input name="customerName" value={formData.customerName} onChange={handleInputChange} required className="w-full px-3 py-2 border border-gray-300 rounded-md" />
                                 </div>
-                                <div>
+                                {/* <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
                                     <input name="customerEmail" value={formData.customerEmail} onChange={handleInputChange} className="w-full px-3 py-2 border border-gray-300 rounded-md" />
-                                </div>
+                                </div> */}
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Phone *</label>
                                     <input name="customerPhone" value={formData.customerPhone} onChange={handleInputChange} required className="w-full px-3 py-2 border border-gray-300 rounded-md" />

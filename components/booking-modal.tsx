@@ -16,10 +16,9 @@ interface BookingModalProps {
   timeSlot: TimeSlot
   room: Room
   scheduleData: ScheduleData
-  isAdmin: boolean
 }
 
-export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData, isAdmin }: BookingModalProps) {
+export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData}: BookingModalProps) {
   const [startTime, setStartTime] = useState(timeSlot.startTime)
   const [endTime, setEndTime] = useState("")
 
@@ -307,9 +306,9 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData, is
                 <p>
                   <span className="font-medium">Total Price:</span> ฿{totalPrice.toFixed(2)}
                 </p>
-                <p>
+                {/* <p>
                   <span className="font-medium">Capacity:</span> {room.capacity}
-                </p>
+                </p> */}
               </div>
             </div>
 
@@ -329,7 +328,7 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData, is
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label htmlFor="customerName" className="block text-sm font-medium text-gray-700 mb-1">
-                  Full Name *
+                  Name *
                 </label>
                 <input
                   type="text"
@@ -342,7 +341,7 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData, is
                 />
               </div>
 
-              <div>
+              {/* <div>
                 <label htmlFor="customerEmail" className="block text-sm font-medium text-gray-700 mb-1">
                   Email Address 
                 </label>
@@ -355,7 +354,7 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData, is
                   onChange={handleInputChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                 />
-              </div>
+              </div> */}
 
               <div>
                 <label htmlFor="customerPhone" className="block text-sm font-medium text-gray-700 mb-1">
@@ -372,7 +371,7 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData, is
                 />
               </div>
 
-              <div>
+              {/* <div>
                 <label htmlFor="specialRequests" className="block text-sm font-medium text-gray-700 mb-1">
                   Special Requests (Optional)
                 </label>
@@ -385,7 +384,7 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData, is
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                   placeholder="Any special requests or requirements..."
                 />
-              </div>
+              </div> */}
 
               {error && (
                 <div className="p-3 bg-red-50 border border-red-200 rounded-md">

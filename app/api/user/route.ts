@@ -5,8 +5,14 @@ import { siteConfig } from "config/site-config";
 export async function GET(request: NextRequest) {
   try {
     const userId = request.headers.get("userId")
+    const admincredential = request.headers.get("credential")
     //console.log(userId)
-
+    if (admincredential !== process.env.ADMIN_CREDENTIAL) {
+      return NextResponse.json(
+        { success: false, message: "Invalid admin credential" },
+        { status: 401 }
+      )
+    }
     const response = await fetch(`${process.env.API_PATH}/user/${userId}`, {
       method: 'GET',
       headers: {

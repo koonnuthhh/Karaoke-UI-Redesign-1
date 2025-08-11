@@ -30,26 +30,6 @@ interface SlipVerificationResult {
   message: string
 }
 
-async function decodeSlipQR(slipFile: File) {
-  const reader = new BrowserQRCodeReader()
-
-  const imageUrl = URL.createObjectURL(slipFile)
-  const img = new Image()
-  img.src = imageUrl
-
-  return new Promise<string>((resolve, reject) => {
-    img.onload = async () => {
-      try {
-        const result = await reader.decodeFromImageElement(img)
-        resolve(result.getText()) // ✅ this is your QR content
-      } catch (err) {
-        reject("Failed to decode QR")
-      }
-    }
-    img.onerror = () => reject("Failed to load image")
-  })
-}
-
 export function CheckoutModal({ isOpen, onClose, bookingData }: CheckoutModalProps) {
   const [currentStep, setCurrentStep] = useState<CheckoutStep>("booking")
   const [paymentData, setPaymentData] = useState<PaymentData | null>(null)
@@ -195,9 +175,9 @@ export function CheckoutModal({ isOpen, onClose, bookingData }: CheckoutModalPro
           <p>
             <span className="font-medium">Customer:</span> {bookingData.customerName}
           </p>
-          <p>
+          {/* <p>
             <span className="font-medium">Email:</span> {bookingData.customerEmail || "None"}
-          </p>
+          </p> */}
           <p>
             <span className="font-medium">Phone:</span> {bookingData.customerPhone}
           </p>

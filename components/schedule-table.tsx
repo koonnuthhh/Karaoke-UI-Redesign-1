@@ -11,28 +11,24 @@ import { AdminBookingModal } from "../components/admin-booking-modal"
 interface ScheduleTableProps {
   scheduleData: ScheduleData
   isLoading?: boolean
-  isAdmin?: boolean // Added isAdmin prop
+  adminCredential: string | null // Added adminCredential prop
   handleRefresh: () => void
 }
 
 
 
 
-// SlotCell component now accepts the isAdmin prop
+// SlotCell component now accepts the adminCredential prop
 function SlotCell({
   slot,
   onClick,
-  isAdmin
+  adminCredential
 }: {
   slot: TimeSlot
   onClick: (slot: TimeSlot) => void
-  isAdmin: boolean // Added isAdmin to SlotCell props
+  adminCredential: string | null// Added adminCredential to SlotCell props
 }) {
   const [isHover, setIsHover] = useState(false)
-  // if(slot.status === "booked"){
-  //   console.log("booked slot: ",slot)
-  // }
-  // Function to get styles for the slot
   function getSlotStyles(slot: TimeSlot): string {
     const status = slot.status
     const baseStyles =
@@ -41,7 +37,7 @@ function SlotCell({
     switch (status) {
       case "booked":
         // For admin, booked slots are clickable to see details
-        if (isAdmin) {
+        if (adminCredential) {
           return `${baseStyles} ${siteConfig.theme.maintext} border-red-200 cursor-pointer`
         }
         return `${baseStyles} ${siteConfig.theme.maintext} border-red-200 cursor-not-allowed`
@@ -53,7 +49,7 @@ function SlotCell({
         return `${baseStyles} ${siteConfig.theme.maintext} border-green-200`
       case "pending":
         // Admin can click pending to manage it, regular users can't
-        if (isAdmin) {
+        if (adminCredential) {
           return `${baseStyles} ${siteConfig.theme.maintext} border-yellow-200 cursor-pointer`
         }
         return `${baseStyles} ${siteConfig.theme.maintext} border-yellow-200 cursor-not-allowed`
@@ -94,9 +90,9 @@ function SlotCell({
       <div
         className={getSlotStyles(slot)}
         style={{ background: getSlotColor(slot, isHover) }}
-        // Added isAdmin check for clickability of booked and pending slots
+        // Added adminCredential check for clickability of booked and pending slots
         onClick={() => {
-          if (isAdmin) {
+          if (adminCredential) {
             (slot.status != "pending") && onClick(slot)
           } else {
             (slot.status === "available" || slot.status === "cancelled") && onClick(slot)
@@ -106,8 +102,8 @@ function SlotCell({
         {slot.status === "booked" ? (
           <div>
             {/* Conditional rendering: show customer name if admin, otherwise show "Booked" */}
-            <div className="font-medium">{isAdmin && slot.customerName ? slot.customerName : "Booked"}</div>
-            {isAdmin && slot.customerName && (
+            <div className="font-medium">{adminCredential && slot.customerName ? slot.customerName : "Booked"}</div>
+            {adminCredential && slot.customerName && (
               <div className="text-xs text-red-700">Booked</div>
             )}
           </div>
@@ -133,7 +129,7 @@ function SlotCell({
   )
 }
 
-export function ScheduleTable({ scheduleData, isLoading, isAdmin = false, handleRefresh }: ScheduleTableProps) {
+export function ScheduleTable({ scheduleData, isLoading, adminCredential, handleRefresh }: ScheduleTableProps) {
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
 
@@ -155,24 +151,25 @@ export function ScheduleTable({ scheduleData, isLoading, isAdmin = false, handle
 
   return (
     <>
+      <div
+        className="px-6 py-4 sticky top-0 z-50"
+        style={{
+          background: `linear-gradient(to right, ${siteConfig.theme.primary}, ${siteConfig.theme.secondary})`,
+        }}
+      >
+        <h2 className="text-xl font-bold text-white">
+          {siteConfig.content.schedule.tableTitle}
+        </h2>
+        <p className="text-purple-100 text-sm mt-1">
+          Schedule for {new Date(scheduleData.date).toLocaleDateString()}
+        </p>
+      </div>
       <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-        <div
-          className="px-6 py-4"
-          style={{
-            background: `linear-gradient(to right, ${siteConfig.theme.primary}, ${siteConfig.theme.secondary})`,
-          }}
-        >
-          <h2 className="text-xl font-bold text-white">
-            {siteConfig.content.schedule.tableTitle}
-          </h2>
-          <p className="text-purple-100 text-sm mt-1">
-            Schedule for {new Date(scheduleData.date).toLocaleDateString()}
-          </p>
-        </div>
+
 
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50">
+            <thead className="bg-gray-50 sticky top-0 z-50">
               <tr>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Start time
@@ -184,10 +181,10 @@ export function ScheduleTable({ scheduleData, isLoading, isAdmin = false, handle
                   >
                     <div className="flex flex-col items-center">
                       <span className="font-semibold">{room.room_name}</span>
-                      <span className="text-xs text-gray-400">{room.capacity}</span>
-                      <span className="text-xs font-bold text-purple-600">
+                      {/* <span className="text-xs text-gray-400">{room.capacity}</span> */}
+                      {/* <span className="text-xs font-bold text-purple-600">
                         ฿{room.price_per_half_hour * 2}/hr
-                      </span>
+                      </span> */}
                     </div>
                   </th>
                 ))}
@@ -228,7 +225,7 @@ export function ScheduleTable({ scheduleData, isLoading, isAdmin = false, handle
                         key={`${room.room_id}-${timeSlot}`}
                         slot={slot}
                         onClick={handleSlotClick}
-                        isAdmin={isAdmin} // Pass the isAdmin prop down
+                        adminCredential={adminCredential} // Pass the adminCredential prop down
                       />
                     )
                   })}
@@ -273,7 +270,7 @@ export function ScheduleTable({ scheduleData, isLoading, isAdmin = false, handle
       </div>
 
       {selectedSlot && (
-        isAdmin ? (
+        adminCredential ? (
           <AdminBookingModal
             isOpen={isModalOpen}
             onClose={() => {
@@ -284,6 +281,7 @@ export function ScheduleTable({ scheduleData, isLoading, isAdmin = false, handle
             timeSlot={selectedSlot}
             room={scheduleData.rooms.find((r) => r.room_id === selectedSlot.roomId)!}
             scheduleData={scheduleData}
+            adminCredential={adminCredential}
           />
         ) : (
           <BookingModal
@@ -296,7 +294,6 @@ export function ScheduleTable({ scheduleData, isLoading, isAdmin = false, handle
             timeSlot={selectedSlot}
             room={scheduleData.rooms.find((r) => r.room_id === selectedSlot.roomId)!}
             scheduleData={scheduleData}
-            isAdmin={false}
           />
         )
       )}

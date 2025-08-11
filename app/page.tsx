@@ -9,7 +9,7 @@ import { DateSelector } from "../components/date-selector"
 import { useRouter } from "next/navigation"
 
 export default function HomePage(
-  { isAuthenticated = false }: { isAuthenticated?: boolean }
+  { adminCredential = null }: { adminCredential: string | null }
 ) {
   const router = useRouter()
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
@@ -17,12 +17,10 @@ export default function HomePage(
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState("")
   // New state to manage admin status
-  const [isAdmin, setIsAdmin] = useState(false)
 
   useEffect(() => {
     const today = new Date().toISOString().split("T")[0]
     setSelectedDate(today)
-    setIsAdmin(isAuthenticated)
     //console.log("today: ",today)
   }, [])
  
@@ -74,7 +72,7 @@ export default function HomePage(
               <h1 className="text-3xl font-bold text-gray-900 mb-2">{siteConfig.business.name}</h1>
               <p className="text-lg text-gray-600">{siteConfig.business.tagline}</p>
             </div>
-            {isAdmin && (
+            {adminCredential && (
               <button
                 onClick={handleLogout}
                 className="px-4 py-2 font-semibold text-white rounded-md shadow transition-colors"
@@ -122,25 +120,25 @@ export default function HomePage(
         )}
 
         {/* Schedule Table */}
-        {scheduleData && <ScheduleTable scheduleData={scheduleData} isLoading={isLoading} handleRefresh={handleRefresh} isAdmin={isAuthenticated}/>}
+        {scheduleData && <ScheduleTable scheduleData={scheduleData} isLoading={isLoading} handleRefresh={handleRefresh} adminCredential ={adminCredential}/>}
 
         {/* Business Info - Only show if the user is NOT an admin */}
-        {!isAdmin && (
+        {!adminCredential && (
           <div className="mt-12 bg-white rounded-lg shadow-lg p-6">
             <h3 className="text-xl font-bold text-gray-900 mb-4">Contact Information</h3>
             <div className="grid md:grid-cols-2 gap-6">
               <div>
                 <h4 className="font-semibold text-gray-700 mb-2">Get in Touch</h4>
                 <div className="space-y-2 text-gray-600">
-                  <p>📞 {siteConfig.business.phone}</p>
-                  <p>✉️ {siteConfig.business.email}</p>
+                  <p>IG: {siteConfig.business.IG}</p>
+                  <p>Facebook: {siteConfig.business.facebook}</p>
                   <p>📍 {siteConfig.business.address}</p>
                 </div>
               </div>
               <div>
-                <h4 className="font-semibold text-gray-700 mb-2">Business Hours</h4>
+                <h4 className="font-semibold text-gray-700 mb-2">Opening Hours</h4>
                 <div className="space-y-1 text-sm text-gray-600">
-                  {Object.entries(siteConfig.businessHours).map(([day, hours]) => (
+                  {Object.entries(siteConfig.Open_hour).map(([day, hours]) => (
                     <div key={day} className="flex justify-between">
                       <span className="capitalize">{day}:</span>
                       <span>{hours.closed ? "Closed" : `${hours.open} - ${hours.close}`}</span>

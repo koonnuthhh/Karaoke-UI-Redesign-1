@@ -3,9 +3,9 @@ export const siteConfig = {
   business: {
     name: "Alurfia Karaoke",
     tagline: "Be Your Perfect Karaoke Experience",
-    phone: "0945945564",
-    email: "bookings@harmonykaraoke.com",
-    address: "123 Music Street, Entertainment District",
+    IG: "Alurfia.in.shelter",
+    facebook: "Alurfia in shelter",
+    address: "264/2 M.1 Thasud Muang Chiangrai 57100",
   },
 
   payment: {
@@ -19,19 +19,19 @@ export const siteConfig = {
   schedule: {
     maximumPrebook: 30,
     slotDuration: 30, // minutes
-    openTime: "10:00",
+    openTime: "12:00",
     closeTime: "01:00",
   },
 
   // Business Hours
-  businessHours: {
-    monday: { open: "18:00", close: "02:00", closed: false },
-    tuesday: { open: "18:00", close: "02:00", closed: false },
-    wednesday: { open: "18:00", close: "02:00", closed: false },
-    thursday: { open: "18:00", close: "02:00", closed: false },
-    friday: { open: "17:00", close: "03:00", closed: false },
-    saturday: { open: "15:00", close: "03:00", closed: false },
-    sunday: { open: "15:00", close: "01:00", closed: false },
+  Open_hour: {
+    monday: { open: "12:00", close: "01:00", closed: false },
+    tuesday: { open: "12:00", close: "01:00", closed: false },
+    wednesday: { open: "12:00", close: "01:00", closed: false },
+    thursday: { open: "12:00", close: "01:00", closed: false },
+    friday: { open: "12:00", close: "01:00", closed: false },
+    saturday: { open: "12:00", close: "01:00", closed: false },
+    sunday: { open: "12:00", close: "01:00", closed: false },
   },
 
   // Pricing Rules
