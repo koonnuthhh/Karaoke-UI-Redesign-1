@@ -10,9 +10,12 @@ export interface Room {
 export interface TimeSlot {
   id: string
   roomId: string
+  roomName: string
   date: string
   startTime: string
-  endTime: string
+  bookingStart?: string
+  bookingEnd?: string
+  endTime?: string
   status: string
   customerName?: string
   customerID: string
@@ -22,6 +25,7 @@ export interface TimeSlot {
 
 export interface BookingRequest {
   roomId: string
+  roomName: string
   date: string
   timeSlots: string[] // Array of selected time slots
   customerName: string

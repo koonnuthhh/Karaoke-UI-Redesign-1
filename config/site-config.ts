@@ -10,7 +10,7 @@ export const siteConfig = {
 
   payment: {
     accountName:"น.ส. สุธาวี จอประเสริฐกุล",
-    promptPayNumber: "0945945564", 
+    promptPayNumber: "0957742547", 
     currency: "THB",
   },
 

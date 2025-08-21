@@ -4,9 +4,7 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import { X } from "lucide-react"
 import { siteConfig } from "../config/site-config"
-import type { TimeSlot, Room, BookingRequest, ScheduleData } from "../types"
-import { apiClient } from "../lib/api-client"
-import { LoadingSpinner } from "../components/ui/loading-spinner"
+import type { TimeSlot, Room, ScheduleData } from "../types"
 import { calculatePrice, formatDuration, isTimeSlotAvailable, getConsecutiveSlots } from "../lib/time-utils"
 import { CheckoutModal } from "./checkout-modal"
 
@@ -28,7 +26,7 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData}: B
       // Handle overnight hours properly
       const [startHour, startMinute] = startTime.split(':').map(Number)
       let endHour = startHour
-      let endMinute = startMinute + 30
+      let endMinute = startMinute + 60
 
       if (endMinute >= 60) {
         endMinute = endMinute - 60
@@ -112,9 +110,13 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData}: B
       } else {
         slotTime = new Date(`2000-01-01T${slot}`);
       }
-
+      
+      //Ensure user to NOT be able to book 30 minutes
+      startTimeObj.setMinutes(startTimeObj.getMinutes() + 30)
       // End time must be after start time
       if (slotTime <= startTimeObj) return false;
+
+
 
       // Must be before the first unavailable slot (if any)
       if (firstUnavailableSlot) {
@@ -195,17 +197,7 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData}: B
       setError("End time must be after start time")
       return
     }
-
-
-    const bookingRequest: BookingRequest = {
-      roomId: timeSlot.roomId,
-      date: timeSlot.date,
-      timeSlots: [startTime, endTime], // Add timeSlots array for compatibility
-      totalPrice,
-      duration: totalDuration,
-      ...formData,
-    }
-
+    //console.log("timeslot.roomNameee: ",timeSlot.roomName)
     setShowCheckout(true)
   }
 
@@ -419,6 +411,7 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData}: B
           onClose={handleCheckoutClose}
           bookingData={{
             roomId: timeSlot.roomId,
+            roomName: timeSlot.roomName,
             date: timeSlot.date,
             timeSlots: [startTime, endTime],
             totalPrice,

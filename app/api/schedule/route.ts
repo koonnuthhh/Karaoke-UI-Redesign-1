@@ -126,9 +126,11 @@ export async function GET(request: NextRequest) {
         return {
           id: realBooking?.booking_id || `${room.room_id}-${date}-${time}`,
           roomId: room.room_id,
+          roomName: room.room_name,
           date,
+          bookingStart: realBooking?.start_time,
+          bookingEnd: realBooking?.end_time,
           startTime: time,
-          endTime,
           status: status,
           customerName: undefined,
           customerID: realBooking?.user_id,

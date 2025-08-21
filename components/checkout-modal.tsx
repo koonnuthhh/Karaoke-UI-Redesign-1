@@ -45,7 +45,7 @@ export function CheckoutModal({ isOpen, onClose, bookingData }: CheckoutModalPro
   const handleBookingSubmit = async () => {
     setIsLoading(true)
     setError("")
-
+    //console.log("bookingData.roomName: ", bookingData.roomName)
     try {
       // Step 1: Submit booking request
       //console.log("bookingData: ",bookingData)
@@ -401,6 +401,10 @@ export function CheckoutModal({ isOpen, onClose, bookingData }: CheckoutModalPro
             <div className="flex justify-between">
               <span>Date:</span>
               <span>{new Date(bookingData.date).toLocaleDateString()}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Room:</span>
+              <span>{bookingData.roomName}</span>
             </div>
             <div className="flex justify-between">
               <span>Time: </span>

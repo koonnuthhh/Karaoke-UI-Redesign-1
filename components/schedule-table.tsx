@@ -6,6 +6,7 @@ import type { ScheduleData, TimeSlot } from "../types"
 import { LoadingSpinner } from "../components/ui/loading-spinner"
 import { BookingModal } from "../components/booking-modal"
 import { AdminBookingModal } from "../components/admin-booking-modal"
+import { AlertModal } from "./AlertModal"
 
 // Corrected interface for the ScheduleTable props
 interface ScheduleTableProps {
@@ -18,7 +19,7 @@ interface ScheduleTableProps {
 
 
 
-// SlotCell component now accepts the adminCredential prop
+
 function SlotCell({
   slot,
   onClick,
@@ -28,6 +29,7 @@ function SlotCell({
   onClick: (slot: TimeSlot) => void
   adminCredential: string | null// Added adminCredential to SlotCell props
 }) {
+  //console.log("Slot:",slot)
   const [isHover, setIsHover] = useState(false)
   function getSlotStyles(slot: TimeSlot): string {
     const status = slot.status
@@ -95,7 +97,7 @@ function SlotCell({
           if (adminCredential) {
             (slot.status != "pending") && onClick(slot)
           } else {
-            (slot.status === "available" || slot.status === "cancelled") && onClick(slot)
+            ((slot.status === "available" || slot.status === "cancelled")) && onClick(slot)
           }
         }}
       >
@@ -103,9 +105,9 @@ function SlotCell({
           <div>
             {/* Conditional rendering: show customer name if admin, otherwise show "Booked" */}
             <div className="font-medium">{adminCredential && slot.customerName ? slot.customerName : "Booked"}</div>
-            {adminCredential && slot.customerName && (
+            {/* {adminCredential && slot.customerName && (
               <div className="text-xs text-red-700">Booked</div>
-            )}
+            )} */}
           </div>
         ) : slot.status === "available" ? (
           <div>
@@ -132,8 +134,28 @@ function SlotCell({
 export function ScheduleTable({ scheduleData, isLoading, adminCredential, handleRefresh }: ScheduleTableProps) {
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [alertMessage, setAlertMessage] = useState<string | null>(null)
 
   const handleSlotClick = (slot: TimeSlot) => {
+    //console.log("Slot data:",slot)
+    // Only check when user is not admin and slot is available
+    if (!adminCredential && slot.status === "available") {
+      const slotIndex = scheduleData.timeSlots.indexOf(slot.startTime)
+
+      // Each slot = 30 min, so need at least 2 consecutive slots
+      const nextSlotTime = scheduleData.timeSlots[slotIndex + 1]
+
+      const nextSlot = scheduleData.bookings.find(
+        (b) => b.roomId === slot.roomId && b.startTime === nextSlotTime
+      )
+
+      // If next slot doesn't exist or is not available → less than 1 hr
+      if (!nextSlot || nextSlot.status !== "available") {
+        setAlertMessage("Can't book less than 1 hour");
+        return
+      }
+    }
+
     setSelectedSlot(slot)
     setIsModalOpen(true)
   }
@@ -296,6 +318,13 @@ export function ScheduleTable({ scheduleData, isLoading, adminCredential, handle
             scheduleData={scheduleData}
           />
         )
+      )}
+      {alertMessage && (
+        <AlertModal
+          isOpen={!!alertMessage}
+          message={alertMessage}
+          onClose={() => setAlertMessage(null)}
+        />
       )}
     </>
   )

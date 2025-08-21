@@ -7,6 +7,7 @@ import type { TimeSlot, Room, ScheduleData, BookingRequest } from "../types"
 import { calculatePrice, formatDuration, isTimeSlotAvailable } from "../lib/time-utils"
 import { LoadingSpinner } from "../components/ui/loading-spinner"
 import { time } from "console"
+import { AlertModal } from "./AlertModal"
 
 interface AdminBookingModalProps {
     isOpen: boolean
@@ -22,7 +23,7 @@ interface User {
     phone: string
 }
 
-export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleData, adminCredential}: AdminBookingModalProps) {
+export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleData, adminCredential }: AdminBookingModalProps) {
     const [startTime, setStartTime] = useState(timeSlot.startTime)
     const [endTime, setEndTime] = useState("")
     const [formData, setFormData] = useState({
@@ -34,6 +35,7 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [error, setError] = useState("")
     const [User, setUser] = useState<User | null>(null);
+    const [showConfirmCancel, setShowConfirmCancel] = useState(false)
 
 
     // same available slots logic as BookingModal
@@ -87,7 +89,7 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                         headers: {
                             "Content-Type": "application/json",
                             "userId": timeSlot.customerID,
-                            "credential" : adminCredential? adminCredential: ""
+                            "credential": adminCredential ? adminCredential : ""
                         }
                     });
 
@@ -159,6 +161,7 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
             // Step 1: Create booking as pending
             const bookingRequest: BookingRequest = {
                 roomId: timeSlot.roomId,
+                roomName: timeSlot.roomName,
                 date: timeSlot.date,
                 timeSlots: [startTime, endTime],
                 totalPrice,
@@ -179,7 +182,7 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
             // Step 2: Immediately confirm booking
             const updateRes = await fetch("/api/bookings", {
                 method: "PUT",
-                headers: { "Content-Type": "application/json", "credential": adminCredential? adminCredential:""},
+                headers: { "Content-Type": "application/json", "credential": adminCredential ? adminCredential : "" },
                 body: JSON.stringify({
                     booking_id: createResult.data.booking_id,
                     booking_status: "booked"
@@ -199,19 +202,22 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
         }
     }
 
-    const handleCancelBooking = async () => {
-        if (!timeSlot.id) return
+    const confirmCancelBooking = async () => {
         setIsSubmitting(true)
         setError("")
         try {
             const res = await fetch("/api/bookings", {
                 method: "PUT",
-                headers: { "Content-Type": "application/json", "credential": adminCredential? adminCredential:""},
+                headers: {
+                    "Content-Type": "application/json",
+                    "credential": adminCredential ? adminCredential : ""
+                },
                 body: JSON.stringify({
                     booking_id: timeSlot.id,
                     booking_status: "cancelled"
                 })
             })
+
             const result = await res.json()
             if (!result.success) {
                 setError(result.message || "Failed to cancel booking")
@@ -222,7 +228,13 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
             setError("Network error while cancelling booking")
         } finally {
             setIsSubmitting(false)
+            setShowConfirmCancel(false)
         }
+    }
+
+    const handleCancelBooking = () => {
+        if (!timeSlot.id) return
+        setShowConfirmCancel(true)
     }
 
     if (!isOpen) return null
@@ -247,12 +259,13 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                             <>
                                 <p><strong>Customer:</strong> {User.username}</p>
                                 <p><strong>Phone:</strong> {User.phone}</p>
-                                <p><strong>Time:</strong> {timeSlot.startTime} - {timeSlot.endTime}</p>
+                                <p><strong>Time:</strong> {timeSlot.bookingStart} - {timeSlot.bookingEnd}</p>
                                 <div className="mt-4 flex gap-3">
                                     <button
                                         onClick={handleCancelBooking}
-                                        className="flex-1 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
+                                        className="flex-1 px-4 py-2 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
                                         disabled={isSubmitting}
+                                        style={{backgroundColor: siteConfig.theme.error}}
                                     >
                                         {isSubmitting ? <LoadingSpinner size="sm" /> : "Cancel Booking"}
                                     </button>
@@ -337,6 +350,17 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                     )}
                 </div>
             </div>
+            {showConfirmCancel && (
+                <AlertModal
+                    isOpen={showConfirmCancel}
+                    message="Are you sure you want to cancel this booking?"
+                    onClose={() => setShowConfirmCancel(false)}
+                    actions={[
+                        { label: "Yes", onClick: confirmCancelBooking, variant: "error", textcolor:"#FFFFFF" },
+                        { label: "No", onClick: () => setShowConfirmCancel(false), variant: "roomavailable" }
+                    ]}
+                />
+            )}
         </div>
     )
 }
