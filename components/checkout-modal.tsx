@@ -169,6 +169,9 @@ export function CheckoutModal({ isOpen, onClose, bookingData }: CheckoutModalPro
             <span className="font-medium">Date:</span> {new Date(bookingData.date).toLocaleDateString()}
           </p>
           <p>
+            <span className="font-medium">Room:</span> {bookingData.roomName}
+          </p>
+          <p>
             <span className="font-medium">Time: </span>
             {bookingData.timeSlots[0]} - {bookingData.timeSlots[1]}
           </p>
