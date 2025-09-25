@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { siteConfig } from "config/site-config"
 import { Calendar } from "lucide-react"
 
@@ -9,10 +10,32 @@ interface DateSelectorProps {
 }
 
 export function DateSelector({ selectedDate, onDateChange }: DateSelectorProps) {
-  const today = new Date().toISOString().split("T")[0]
-  const maxDate = new Date()
-  maxDate.setDate(maxDate.getDate() + siteConfig.schedule.maximumPrebook)
-  const maxDateString = maxDate.toISOString().split("T")[0]
+  const [currentDate, setCurrentDate] = useState<string>("")
+  const [maxDate, setMaxDate] = useState<string>("")
+
+  // Update dates dynamically
+  useEffect(() => {
+    const updateDates = () => {
+      const now = new Date()
+      const today = now.toISOString().split("T")[0]
+      
+      // Calculate max date from current date
+      const maxDateCalc = new Date()
+      maxDateCalc.setDate(maxDateCalc.getDate() + siteConfig.schedule.maximumPrebook)
+      const maxDateString = maxDateCalc.toISOString().split("T")[0]
+      
+      setCurrentDate(today)
+      setMaxDate(maxDateString)
+    }
+
+    // Initial update
+    updateDates()
+
+    // Update every minute to catch date changes
+    const interval = setInterval(updateDates, 60000)
+
+    return () => clearInterval(interval)
+  }, [])
 
   return (
     <div className="flex items-center gap-3">
@@ -24,8 +47,8 @@ export function DateSelector({ selectedDate, onDateChange }: DateSelectorProps) 
         id="date-select"
         type="date"
         value={selectedDate ?? ""}
-        min={today}
-        max={maxDateString}
+        min={currentDate}
+        max={maxDate}
         onChange={(e) => onDateChange(e.target.value)}
         className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
       />
