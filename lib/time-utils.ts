@@ -92,3 +92,31 @@ export function getConsecutiveSlots(selectedSlots: string[], allSlots: string[])
 
   return true
 }
+
+export function isTimeSlotPast(timeSlot: string, scheduleDate: string): boolean {
+  const now = new Date()
+  
+  // Parse the schedule date and ensure we're working in local time
+  const [year, month, day] = scheduleDate.split('-').map(Number)
+  
+  // Parse time slot (e.g., "14:30")
+  const [hours, minutes] = timeSlot.split(':').map(Number)
+  
+  // Validate parsed values
+  if (isNaN(year) || isNaN(month) || isNaN(day) || isNaN(hours) || isNaN(minutes)) {
+    console.error('Invalid date or time format:', { scheduleDate, timeSlot })
+    return false
+  }
+  
+  // Create slot date in local time (month is 0-indexed in Date constructor)
+  let slotDate = new Date(year, month - 1, day, hours, minutes, 0, 0)
+  
+  // Handle overnight schedule: if the time slot is in early morning hours (00:00 to 06:00),
+  // it likely refers to the next day
+  if (hours >= 0 && hours < 6) {
+    slotDate.setDate(slotDate.getDate() + 1)
+  }
+  
+  // Compare with current time
+  return slotDate < now
+}

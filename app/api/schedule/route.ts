@@ -132,7 +132,7 @@ export async function GET(request: NextRequest) {
           bookingEnd: realBooking?.end_time,
           startTime: time,
           status: status,
-          customerName: undefined,
+          customerName: realBooking?.username || null,
           customerID: realBooking?.user_id,
           price: realBooking?.price ?? room.price_per_half_hour,
           duration: siteConfig.schedule.slotDuration,

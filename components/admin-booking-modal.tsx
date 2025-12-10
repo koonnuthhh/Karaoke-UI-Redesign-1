@@ -254,7 +254,19 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                 <div className="p-6">
                     {timeSlot.status === "booked" ? (
                         User == null ? (
+                            <>
                             <p>Loading customer data...</p> // or <LoadingSpinner size="md" />
+                            <div className="mt-4 flex gap-3">
+                                    <button
+                                        onClick={handleCancelBooking}
+                                        className="flex-1 px-4 py-2 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
+                                        disabled={isSubmitting}
+                                        style={{backgroundColor: siteConfig.theme.error}}
+                                    >
+                                        {isSubmitting ? <LoadingSpinner size="sm" /> : "Cancel Booking"}
+                                    </button>
+                                </div>
+                                </>
                         ) : (
                             <>
                                 <p><strong>Customer:</strong> {User.username}</p>

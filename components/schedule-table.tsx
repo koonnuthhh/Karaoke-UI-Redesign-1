@@ -7,6 +7,7 @@ import { LoadingSpinner } from "../components/ui/loading-spinner"
 import { BookingModal } from "../components/booking-modal"
 import { AdminBookingModal } from "../components/admin-booking-modal"
 import { AlertModal } from "./AlertModal"
+import { isTimeSlotPast } from "../lib/time-utils"
 
 // Corrected interface for the ScheduleTable props
 interface ScheduleTableProps {
@@ -23,18 +24,26 @@ interface ScheduleTableProps {
 function SlotCell({
   slot,
   onClick,
-  adminCredential
+  adminCredential,
+  scheduleDate
 }: {
   slot: TimeSlot
   onClick: (slot: TimeSlot) => void
   adminCredential: string | null// Added adminCredential to SlotCell props
+  scheduleDate: string
 }) {
   //console.log("Slot:",slot)
   const [isHover, setIsHover] = useState(false)
   function getSlotStyles(slot: TimeSlot): string {
     const status = slot.status
+    const isPast = isTimeSlotPast(slot.startTime, scheduleDate)
     const baseStyles =
       "p-2 text-center text-sm border rounded cursor-pointer transition-colors duration-200 select-none"
+
+    // If time slot has passed, make it non-clickable for non-admin users
+    if (isPast && !adminCredential) {
+      return `${baseStyles} ${siteConfig.theme.maintext} cursor-not-allowed opacity-50`
+    }
 
     switch (status) {
       case "booked":
@@ -63,6 +72,13 @@ function SlotCell({
   // Function to get slot background color
   function getSlotColor(slot: TimeSlot, isHover: boolean): string {
     const status = slot.status
+    const isPast = isTimeSlotPast(slot.startTime, scheduleDate)
+    
+    // If time slot has passed and user is not admin, show grayed out
+    if (isPast && !adminCredential) {
+      return siteConfig.theme.roomclosed
+    }
+    
     switch (status) {
       case "booked":
         return siteConfig.theme.roombooked
@@ -94,6 +110,13 @@ function SlotCell({
         style={{ background: getSlotColor(slot, isHover) }}
         // Added adminCredential check for clickability of booked and pending slots
         onClick={() => {
+          const isPast = isTimeSlotPast(slot.startTime, scheduleDate)
+          
+          // Prevent clicking on past slots for non-admin users
+          if (isPast && !adminCredential) {
+            return
+          }
+          
           if (adminCredential) {
             (slot.status != "pending") && onClick(slot)
           } else {
@@ -104,7 +127,7 @@ function SlotCell({
         {slot.status === "booked" ? (
           <div>
             {/* Conditional rendering: show customer name if admin, otherwise show "Booked" */}
-            <div className="font-medium">{adminCredential && slot.customerName ? slot.customerName : "Booked"}</div>
+            <div className="font-medium">{ slot.customerName == "" ? slot.customerName : "Booked" }</div>
             {/* {adminCredential && slot.customerName && (
               <div className="text-xs text-red-700">Booked</div>
             )} */}
@@ -176,7 +199,7 @@ export function ScheduleTable({ scheduleData, isLoading, adminCredential, handle
       <div
         className="px-6 py-4 sticky top-0 z-50"
         style={{
-          background: `linear-gradient(to right, ${siteConfig.theme.primary}, ${siteConfig.theme.secondary})`,
+          background: `linear-gradient(to right, ${siteConfig.theme.secondary}, ${siteConfig.theme.primary})`,
         }}
       >
         <h2 className="text-xl font-bold text-white">
@@ -191,15 +214,16 @@ export function ScheduleTable({ scheduleData, isLoading, adminCredential, handle
 
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50 sticky top-0 z-50">
+            <thead className="sticky top-0 z-50" style={{ backgroundColor: '#f9fafb' }}>
               <tr>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider" style={{ color: siteConfig.theme.maintext }}>
                   Start time
                 </th>
                 {scheduleData.rooms.map((room) => (
                   <th
                     key={room.room_id}
-                    className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider"
+                    style={{ color: siteConfig.theme.maintext }}
                   >
                     <div className="flex flex-col items-center">
                       <span className="font-semibold">{room.room_name}</span>
@@ -212,10 +236,10 @@ export function ScheduleTable({ scheduleData, isLoading, adminCredential, handle
                 ))}
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-white divide-y" style={{ borderColor: '#e5e7eb' }}>
               {scheduleData.timeSlots.slice(0, -1).map((timeSlot) => (
                 <tr key={timeSlot} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                  <td className="px-4 py-3 whitespace-nowrap text-sm font-medium" style={{ color: siteConfig.theme.maintext }}>
                     {timeSlot}
                   </td>
                   {scheduleData.rooms.map((room) => {
@@ -248,6 +272,7 @@ export function ScheduleTable({ scheduleData, isLoading, adminCredential, handle
                         slot={slot}
                         onClick={handleSlotClick}
                         adminCredential={adminCredential} // Pass the adminCredential prop down
+                        scheduleDate={scheduleData.date}
                       />
                     )
                   })}

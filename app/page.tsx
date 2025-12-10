@@ -97,7 +97,7 @@ export default function HomePage(
             onClick={handleRefresh}
             className="flex items-center gap-2 px-4 py-2 font-semibold rounded-md shadow transition-colors"
             style={{
-              backgroundColor: siteConfig.theme.secondary,
+              backgroundColor: siteConfig.theme.primary,
               color: "#fff",
               border: "none",
             }}

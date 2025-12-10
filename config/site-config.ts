@@ -52,9 +52,9 @@ export const siteConfig = {
   // UI Configuration
   theme: {
     maintext: "text-grey-400",
-    primary: "rgb(27, 20, 34)", // purple-600
-    secondary: "rgb(18, 64, 138)", // blue-500
-
+    primary: "rgb(18, 64, 138)", // purple-600
+    secondary: "rgb(27, 20, 34)", // blue-500
+    //rgb(18, 64, 138)
     accent: "rgb(245, 158, 11)", // amber-500
     success: "rgb(34, 197, 94)", // green-500
     error: "rgb(239, 68, 68)", // red-500
@@ -72,8 +72,8 @@ export const siteConfig = {
     hero: {
       // title: "This could be use for Title of promotion",
       // subtitle: "This could be use for detail!",
-      title: "",
-      subtitle: "",
+      title: "You can use คนละครึ่ง",
+      subtitle: "Get discounts with the government co-payment scheme",
     },
     booking: {
       modalTitle: "Book Your Karaoke Session",

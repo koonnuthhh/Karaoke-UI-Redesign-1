@@ -58,13 +58,16 @@ export function AlertModal({ isOpen, message, onClose, actions }: AlertModalProp
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b">
-          <h2 className="text-xl font-bold text-gray-900">
+        <div className="flex items-center justify-between p-6 border-b" style={{ borderColor: '#e5e7eb' }}>
+          <h2 className="text-xl font-bold" style={{ color: siteConfig.theme.primary }}>
             {siteConfig.content.booking.modalTitle}
           </h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="transition-colors"
+            style={{ color: '#9ca3af' }}
+            onMouseEnter={(e) => e.currentTarget.style.color = '#6b7280'}
+            onMouseLeave={(e) => e.currentTarget.style.color = '#9ca3af'}
           >
             <X className="w-6 h-6" />
           </button>
@@ -72,7 +75,7 @@ export function AlertModal({ isOpen, message, onClose, actions }: AlertModalProp
 
         {/* Body */}
         <div className="p-6 text-center">
-          <p className="text-gray-700 text-lg font-medium">{message}</p>
+          <p className="text-lg font-medium" style={{ color: siteConfig.theme.primary }}>{message}</p>
         </div>
 
         {/* Footer */}
@@ -92,7 +95,7 @@ export function AlertModal({ isOpen, message, onClose, actions }: AlertModalProp
             <button
               type="button"
               onClick={onClose}
-              style={getButtonStyle("roomavailable", false,)}
+              style={getButtonStyle("roomavailable", false)}
             >
               OK
             </button>
