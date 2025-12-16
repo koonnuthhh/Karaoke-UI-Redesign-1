@@ -68,3 +68,11 @@ export interface AdminStats {
   occupancyRate: number
   popularRooms: { roomName: string; bookings: number }[]
 }
+
+export interface Admin {
+  id: string
+  name: string
+  username: string
+  password?: string
+  role: string
+}

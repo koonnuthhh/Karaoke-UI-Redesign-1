@@ -54,7 +54,7 @@ export function PromotionsTab({ promotions, dataLoading, adminCredential, onRefr
         headers: { 
           "Content-Type": "application/json"
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({ data: formData })
       })
       
       const data = await res.json()
@@ -74,14 +74,25 @@ export function PromotionsTab({ promotions, dataLoading, adminCredential, onRefr
   }
 
   const handleDeletePromotion = async () => {
+    if (!adminCredential) {
+      setError("Authentication required. Please login again.")
+      return
+    }
+
+    if (!selectedPromotion?.id) {
+      setError("Invalid promotion ID. Please try again.")
+      return
+    }
+
     try {
       setIsSubmitting(true)
       setError("")
-      const res = await fetch(`/api/admin/promotions/${selectedPromotion?.id}`, {
+      const res = await fetch(`/api/admin/promotions/${selectedPromotion.id}`, {
         method: "DELETE",
         headers: { 
           "Content-Type": "application/json"
-        }
+        },
+        body: JSON.stringify({ data: { admin_id: adminCredential } })
       })
       
       const data = await res.json()
@@ -90,7 +101,8 @@ export function PromotionsTab({ promotions, dataLoading, adminCredential, onRefr
         setSelectedPromotion(null)
         onRefresh()
       } else {
-        setError(data.message || "Failed to delete promotion")
+        const message = data.message || "Failed to delete promotion"
+        setError(message === "NOT_FOUND" ? "Promotion not found or already deleted" : message)
       }
     } catch (err) {
       setError("Network error while deleting promotion")

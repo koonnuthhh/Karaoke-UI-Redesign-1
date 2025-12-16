@@ -54,7 +54,7 @@ export function AdminsTab({ admins, dataLoading, adminCredential, onRefresh }: A
         headers: { 
           "Content-Type": "application/json"
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({ data: formData })
       })
       
       const data = await res.json()
@@ -74,14 +74,25 @@ export function AdminsTab({ admins, dataLoading, adminCredential, onRefresh }: A
   }
 
   const handleDeleteAdmin = async () => {
+    if (!adminCredential) {
+      setError("Authentication required. Please login again.")
+      return
+    }
+
+    if (!selectedAdmin?.id) {
+      setError("Invalid admin ID. Please try again.")
+      return
+    }
+
     try {
       setIsSubmitting(true)
       setError("")
-      const res = await fetch(`/api/admin/${selectedAdmin?.id}`, {
+      const res = await fetch(`/api/admin/${selectedAdmin.id}`, {
         method: "DELETE",
         headers: { 
           "Content-Type": "application/json"
-        }
+        },
+        body: JSON.stringify({ data: { admin_id: adminCredential } })
       })
       
       const data = await res.json()
@@ -90,7 +101,8 @@ export function AdminsTab({ admins, dataLoading, adminCredential, onRefresh }: A
         setSelectedAdmin(null)
         onRefresh()
       } else {
-        setError(data.message || "Failed to delete admin")
+        const message = data.message || "Failed to delete admin"
+        setError(message === "NOT_FOUND" ? "Admin not found or already deleted" : message)
       }
     } catch (err) {
       setError("Network error while deleting admin")
@@ -131,8 +143,8 @@ export function AdminsTab({ admins, dataLoading, adminCredential, onRefresh }: A
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {Array.isArray(admins) ? admins.map((admin) => (
-                  <tr key={admin.id}>
+                {Array.isArray(admins) ? admins.map((admin, index) => (
+                  <tr key={admin.id || `admin-${index}`}>
                     <td className="px-6 py-4 text-sm text-gray-900">{admin.name}</td>
                     <td className="px-6 py-4 text-sm text-gray-600">{admin.username}</td>
                     <td className="px-6 py-4 text-sm text-gray-600">{admin.role}</td>

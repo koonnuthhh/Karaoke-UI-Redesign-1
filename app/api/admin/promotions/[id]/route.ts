@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { siteConfig } from "@/config/site-config"
 
-export async function GET(req: NextRequest) {
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const res = await fetch(`${siteConfig.api.baseURL}/admin/promotions`, {
+    const id = params.id
+
+    const res = await fetch(`${siteConfig.api.baseURL}/promotions/${id}`, {
       method: "GET",
       headers: {
         apikey: `${process.env.API_KEY}`,
@@ -28,63 +30,18 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(data)
   } catch (error) {
-    console.error("Error fetching promotions:", error)
+    console.error("Error fetching promotion:", error)
     return NextResponse.json(
-      { success: false, message: "Failed to fetch promotions" },
+      { success: false, message: "Failed to fetch promotion" },
       { status: 500 }
     )
   }
 }
 
-export async function POST(req: NextRequest) {
+export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const body = await req.json()
-    const res = await fetch(`${siteConfig.api.baseURL}/promotions`, {
-      method: "POST",
-      headers: {
-        apikey: `${process.env.API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ data: body })
-    })
-
-    const text = await res.text()
-    let data
-    try {
-      data = JSON.parse(text)
-    } catch {
-      return NextResponse.json(
-        { success: false, message: text || "Invalid response from server" },
-        { status: res.status }
-      )
-    }
-
-    if (!res.ok) {
-      return NextResponse.json(data, { status: res.status })
-    }
-
-    return NextResponse.json(data)
-  } catch (error) {
-    console.error("Error creating promotion:", error)
-    return NextResponse.json(
-      { success: false, message: "Failed to create promotion" },
-      { status: 500 }
-    )
-  }
-}
-
-export async function PUT(req: NextRequest) {
-  try {
-    const body = await req.json()
-    const { searchParams } = new URL(req.url)
-    const id = searchParams.get("id")
-
-    if (!id) {
-      return NextResponse.json(
-        { success: false, message: "ID is required" },
-        { status: 400 }
-      )
-    }
+    const id = params.id
 
     const res = await fetch(`${siteConfig.api.baseURL}/promotions/${id}`, {
       method: "PUT",
@@ -92,7 +49,7 @@ export async function PUT(req: NextRequest) {
         apikey: `${process.env.API_KEY}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ data: body })
+      body: JSON.stringify(body)
     })
 
     const text = await res.text()
@@ -120,18 +77,10 @@ export async function PUT(req: NextRequest) {
   }
 }
 
-export async function DELETE(req: NextRequest) {
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const body = await req.json()
-    const { searchParams } = new URL(req.url)
-    const id = searchParams.get("id")
-
-    if (!id) {
-      return NextResponse.json(
-        { success: false, message: "ID is required" },
-        { status: 400 }
-      )
-    }
+    const id = params.id
 
     const res = await fetch(`${siteConfig.api.baseURL}/promotions/${id}`, {
       method: "DELETE",
@@ -139,7 +88,7 @@ export async function DELETE(req: NextRequest) {
         apikey: `${process.env.API_KEY}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ data: body })
+      body: JSON.stringify(body)
     })
 
     const text = await res.text()

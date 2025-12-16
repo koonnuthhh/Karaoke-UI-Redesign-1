@@ -1,31 +1,16 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { siteConfig } from "@/config/site-config"
 
-export async function GET(req: Request) {
-  const username = req.headers.get("username")
-  const password = req.headers.get("password")
-
-  if (username === "admin" && password === "karaoke2024") {
-    return NextResponse.json({ success: true, credential : process.env.ADMIN_CREDENTIAL })
-  }
-
-  return NextResponse.json(
-    { success: false, message: "Invalid credentials" },
-    { status: 401 }
-  )
-}
-
-// POST - Create admin
-export async function POST(req: Request) {
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const body = await req.json()
-    const res = await fetch(`${siteConfig.api.baseURL}/admin`, {
-      method: "POST",
+    const id = params.id
+
+    const res = await fetch(`${siteConfig.api.baseURL}/admin/${id}`, {
+      method: "GET",
       headers: {
         apikey: `${process.env.API_KEY}`,
         "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ data: body })
+      }
     })
 
     const text = await res.text()
@@ -45,27 +30,18 @@ export async function POST(req: Request) {
 
     return NextResponse.json(data)
   } catch (error) {
-    console.error("Error creating admin:", error)
+    console.error("Error fetching admin:", error)
     return NextResponse.json(
-      { success: false, message: "Failed to create admin" },
+      { success: false, message: "Failed to fetch admin" },
       { status: 500 }
     )
   }
 }
 
-// PUT - Update admin
-export async function PUT(req: Request) {
+export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const body = await req.json()
-    const { searchParams } = new URL(req.url)
-    const id = searchParams.get("id")
-
-    if (!id) {
-      return NextResponse.json(
-        { success: false, message: "ID is required" },
-        { status: 400 }
-      )
-    }
+    const id = params.id
 
     const res = await fetch(`${siteConfig.api.baseURL}/admin/${id}`, {
       method: "PUT",
@@ -73,7 +49,7 @@ export async function PUT(req: Request) {
         apikey: `${process.env.API_KEY}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ data: body })
+      body: JSON.stringify(body)
     })
 
     const text = await res.text()
@@ -101,19 +77,10 @@ export async function PUT(req: Request) {
   }
 }
 
-// DELETE - Delete admin
-export async function DELETE(req: Request) {
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const body = await req.json()
-    const { searchParams } = new URL(req.url)
-    const id = searchParams.get("id")
-
-    if (!id) {
-      return NextResponse.json(
-        { success: false, message: "ID is required" },
-        { status: 400 }
-      )
-    }
+    const id = params.id
 
     const res = await fetch(`${siteConfig.api.baseURL}/admin/${id}`, {
       method: "DELETE",
@@ -121,7 +88,7 @@ export async function DELETE(req: Request) {
         apikey: `${process.env.API_KEY}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ data: body })
+      body: JSON.stringify(body)
     })
 
     const text = await res.text()

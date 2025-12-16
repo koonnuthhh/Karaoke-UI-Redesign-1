@@ -54,7 +54,7 @@ export function RoomsTab({ rooms, dataLoading, adminCredential, onRefresh }: Roo
         headers: { 
           "Content-Type": "application/json"
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({ data: formData })
       })
       
       const data = await res.json()
@@ -74,14 +74,25 @@ export function RoomsTab({ rooms, dataLoading, adminCredential, onRefresh }: Roo
   }
 
   const handleDeleteRoom = async () => {
+    if (!adminCredential) {
+      setError("Authentication required. Please login again.")
+      return
+    }
+
+    if (!selectedRoom?.room_id) {
+      setError("Invalid room ID. Please try again.")
+      return
+    }
+
     try {
       setIsSubmitting(true)
       setError("")
-      const res = await fetch(`/api/admin/rooms/${selectedRoom?.room_id}`, {
+      const res = await fetch(`/api/admin/rooms/${selectedRoom.room_id}`, {
         method: "DELETE",
         headers: { 
           "Content-Type": "application/json"
-        }
+        },
+        body: JSON.stringify({ data: { admin_id: adminCredential } })
       })
       
       const data = await res.json()
@@ -90,7 +101,8 @@ export function RoomsTab({ rooms, dataLoading, adminCredential, onRefresh }: Roo
         setSelectedRoom(null)
         onRefresh()
       } else {
-        setError(data.message || "Failed to delete room")
+        const message = data.message || "Failed to delete room"
+        setError(message === "NOT_FOUND" ? "Room not found or already deleted" : message)
       }
     } catch (err) {
       setError("Network error while deleting room")
