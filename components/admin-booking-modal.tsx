@@ -6,7 +6,6 @@ import { siteConfig } from "../config/site-config"
 import type { TimeSlot, Room, ScheduleData, BookingRequest } from "../types"
 import { calculatePrice, formatDuration, isTimeSlotAvailable } from "../lib/time-utils"
 import { LoadingSpinner } from "../components/ui/loading-spinner"
-import { time } from "console"
 import { AlertModal } from "./AlertModal"
 
 interface AdminBookingModalProps {
@@ -17,12 +16,6 @@ interface AdminBookingModalProps {
     scheduleData: ScheduleData
     adminCredential: string | null
 }
-interface User {
-    username: string
-    email: string
-    phone: string
-}
-
 export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleData, adminCredential }: AdminBookingModalProps) {
     const [startTime, setStartTime] = useState(timeSlot.startTime)
     const [endTime, setEndTime] = useState("")
@@ -34,8 +27,10 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
     })
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [error, setError] = useState("")
-    const [User, setUser] = useState<User | null>(null);
     const [showConfirmCancel, setShowConfirmCancel] = useState(false)
+    const bookedSlot = timeSlot.status === "booked"
+        ? scheduleData.bookings.find(b => b.id === timeSlot.id)
+        : null
 
 
     // same available slots logic as BookingModal
@@ -80,37 +75,6 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
     })
 
     // default end time logic same as BookingModal
-    useEffect(() => {
-        if (timeSlot.status === "booked" && timeSlot.customerID) {
-            (async () => {
-                try {
-                    const userraw = await fetch("/api/user", {
-                        method: "GET",
-                        headers: {
-                            "Content-Type": "application/json",
-                            "userId": timeSlot.customerID,
-                            "credential": adminCredential ? adminCredential : ""
-                        }
-                    });
-
-                    const userdata = await userraw.json();
-                    setUser({
-                        username: userdata.data.username,
-                        email: userdata.data.email,
-                        phone: userdata.data.phone,
-                    });
-                    //console.log("userdata: ", userdata)
-                } catch (err) {
-                    console.error("Failed to fetch user:", err);
-                }
-            })();
-        } else {
-            setUser(null); // reset when timeslot changes
-        }
-    }, [timeSlot.status, timeSlot.customerID]);
-
-    //console.log("User: ", User)
-
     // Set default end time separately
     useEffect(() => {
         if (isOpen && startTime) {
@@ -253,38 +217,22 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
 
                 <div className="p-6">
                     {timeSlot.status === "booked" ? (
-                        User == null ? (
-                            <>
-                            <p>Loading customer data...</p> // or <LoadingSpinner size="md" />
+                        <>
+                            <p><strong>Customer:</strong> {bookedSlot?.customerName ?? timeSlot.customerName ?? "Unknown"}</p>
+                            <p><strong>Phone:</strong> {bookedSlot?.customerPhone ?? timeSlot.customerPhone ?? "Not provided"}</p>
+                            <p><strong>Time:</strong> {timeSlot.bookingStart} - {timeSlot.bookingEnd}</p>
                             <div className="mt-4 flex gap-3">
-                                    <button
-                                        onClick={handleCancelBooking}
-                                        className="flex-1 px-4 py-2 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
-                                        disabled={isSubmitting}
-                                        style={{backgroundColor: siteConfig.theme.error}}
-                                    >
-                                        {isSubmitting ? <LoadingSpinner size="sm" /> : "Cancel Booking"}
-                                    </button>
-                                </div>
-                                </>
-                        ) : (
-                            <>
-                                <p><strong>Customer:</strong> {User.username}</p>
-                                <p><strong>Phone:</strong> {User.phone}</p>
-                                <p><strong>Time:</strong> {timeSlot.bookingStart} - {timeSlot.bookingEnd}</p>
-                                <div className="mt-4 flex gap-3">
-                                    <button
-                                        onClick={handleCancelBooking}
-                                        className="flex-1 px-4 py-2 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
-                                        disabled={isSubmitting}
-                                        style={{backgroundColor: siteConfig.theme.error}}
-                                    >
-                                        {isSubmitting ? <LoadingSpinner size="sm" /> : "Cancel Booking"}
-                                    </button>
-                                </div>
-                                {error && <p className="text-red-600 mt-3">{error}</p>}
-                            </>
-                        )
+                                <button
+                                    onClick={handleCancelBooking}
+                                    className="flex-1 px-4 py-2 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
+                                    disabled={isSubmitting}
+                                    style={{backgroundColor: siteConfig.theme.error}}
+                                >
+                                    {isSubmitting ? <LoadingSpinner size="sm" /> : "Cancel Booking"}
+                                </button>
+                            </div>
+                            {error && <p className="text-red-600 mt-3">{error}</p>}
+                        </>
                     ) : (
                         <>
                             {/* Same UI as BookingModal */}

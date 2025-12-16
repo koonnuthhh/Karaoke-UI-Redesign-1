@@ -344,6 +344,7 @@ export function CheckoutModal({ isOpen, onClose, bookingData }: CheckoutModalPro
         </button>
         <button
           onClick={() => setCurrentStep("slip-upload")}
+          // onClick={() => setCurrentStep("success")}
           className="flex-1 px-4 py-2 text-white rounded-md transition-colors"
           style={{ backgroundColor: siteConfig.theme.primary }}
           onMouseEnter={(e) => e.currentTarget.style.backgroundColor = siteConfig.theme.secondary}

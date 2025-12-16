@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
       {
         method: "GET",
         headers: {
-          APIKEY: APIKEY,
+          apikey: `${process.env.API_KEY}`,
           "Content-Type": "application/json",
         },
       },
@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
       {
         method: "GET",
         headers: {
-          APIKEY: APIKEY,
+          apikey: `${process.env.API_KEY}`,
           "Content-Type": "application/json",
         },
       },
@@ -133,6 +133,7 @@ export async function GET(request: NextRequest) {
           startTime: time,
           status: status,
           customerName: realBooking?.username || null,
+          customerPhone: realBooking?.phone || null,
           customerID: realBooking?.user_id,
           price: realBooking?.price ?? room.price_per_half_hour,
           duration: siteConfig.schedule.slotDuration,

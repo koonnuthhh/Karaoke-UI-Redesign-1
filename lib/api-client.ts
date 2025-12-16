@@ -15,6 +15,7 @@ class ApiClient {
 
     const config: RequestInit = {
       headers: {
+        apikey: `${typeof window === 'undefined' ? process.env.API_KEY : ''}`,
         "Content-Type": "application/json",
         ...options.headers,
       },

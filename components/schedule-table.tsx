@@ -42,7 +42,7 @@ function SlotCell({
 
     // If time slot has passed, make it non-clickable for non-admin users
     if (isPast && !adminCredential) {
-      return `${baseStyles} ${siteConfig.theme.maintext} cursor-not-allowed opacity-50`
+      return `${baseStyles} ${siteConfig.theme.maintext} cursor-not-allowed`
     }
 
     switch (status) {
@@ -126,8 +126,8 @@ function SlotCell({
       >
         {slot.status === "booked" ? (
           <div>
-            {/* Conditional rendering: show customer name if admin, otherwise show "Booked" */}
-            <div className="font-medium">{ slot.customerName == "" ? slot.customerName : "Booked" }</div>
+            {/* Conditional rendering: show customer name if they are non-empty, otherwise show "Booked" */}
+            <div className="font-medium">{ slot.customerName != "" ? slot.customerName : "Booked" }</div>
             {/* {adminCredential && slot.customerName && (
               <div className="text-xs text-red-700">Booked</div>
             )} */}

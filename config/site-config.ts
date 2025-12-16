@@ -97,6 +97,7 @@ export const siteConfig = {
 
   // API Configuration
   api: {
+    baseURL: process.env.API_PATH || "http://localhost:3000",
     endpoints: {
       bookings: "/api/bookings",
       rooms: "/api/rooms",
