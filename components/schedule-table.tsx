@@ -41,8 +41,7 @@ function SlotCell({
   function getSlotStyles(slot: TimeSlot): string {
     const status = slot.status
     const isPast = isTimeSlotPast(slot.startTime, scheduleDate)
-    const baseStyles =
-      "p-1.5 sm:p-2 text-center text-xs sm:text-sm border rounded cursor-pointer transition-colors duration-200 select-none"
+    const baseStyles = "p-1.5 sm:p-2 text-center text-xs sm:text-sm border rounded cursor-pointer transition-colors duration-200"
 
     // If time slot has passed, make it non-clickable for non-admin users
     if (isPast && !adminCredential) {
@@ -115,7 +114,7 @@ function SlotCell({
       onMouseLeave={() => setIsHover(false)}
     >
       <div
-        className={getSlotStyles(slot)}
+        className={`${getSlotStyles(slot)} flex items-center justify-center`}
         style={{ background: getSlotColor(slot, isHover) }}
         // Added adminCredential check for clickability of booked and pending slots
         onClick={() => {
@@ -150,14 +149,15 @@ function SlotCell({
           const isUnavailable = (isModulator || isPast || slot.status === "closed" ) && !adminCredential &&  slot.status !== "booked"
           
           if (isUnavailable) {
-            return <div className="font-medium">Unavailable</div>
+            return <div className="font-medium truncate max-w-[5rem]">Unavailable</div>
           }
           
           if (slot.status === "booked") {
             return (
               <div>
                 {/* Conditional rendering: show customer name if they are non-empty, otherwise show "Booked" */}
-                <div className="font-medium">{ slot.customerName != "" ? slot.customerName : "Booked" }</div>
+                
+                <div className="font-medium truncate max-w-[5rem]">{ slot.customerName != null ? slot.customerName : "Anonymous" }</div>
                 {/* {adminCredential && slot.customerName && (
               <div className="text-xs text-red-700">Booked</div>
             )} */}
@@ -168,7 +168,7 @@ function SlotCell({
           if (slot.status === "available" || slot.status === "cancelled") {
             return (
               <div>
-                <div className="font-medium cursor-pointer">Available</div>
+                <div className="font-medium cursor-pointer truncate max-w-[5rem]">Available</div>
                 {/* <div className="text-xs">${slot.price}</div> */}
               </div>
             )
@@ -177,12 +177,12 @@ function SlotCell({
           if (slot.status === "pending") {
             return (
               <div>
-                <div className="font-medium">Pending</div>
+                <div className="font-medium truncate max-w-[5rem]">Pending</div>
               </div>
             )
           }
           
-          return <div className="font-medium">Closed</div>
+          return <div className="font-medium truncate max-w-[5rem]">Closed</div>
         })()}
       </div>
     </td>

@@ -375,7 +375,7 @@ export function DashboardVisualization() {
         </div>
 
         {/* Booking Status Chart */}
-        <div className="bg-white p-6 rounded-lg shadow">
+        {/* <div className="bg-white p-6 rounded-lg shadow">
           <h3 className="text-lg font-semibold text-gray-900 mb-2">Booking Status Distribution</h3>
           <p className="text-sm text-gray-600 mb-4">Breakdown of all bookings by status (Confirmed, Pending, Cancelled). Shows the proportion of completed bookings versus pending or cancelled ones.</p>
           {statusData.length > 0 ? (
@@ -403,7 +403,7 @@ export function DashboardVisualization() {
               No booking data available
             </div>
           )}
-        </div>
+        </div> */}
 
         {/* Popular Rooms Chart */}
         <div className="bg-white p-6 rounded-lg shadow">
