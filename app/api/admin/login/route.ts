@@ -23,7 +23,7 @@ export async function POST(req: Request) {
     // This is a placeholder - integrate with your actual admin authentication backend
     
     // Example: Call your actual backend API
-    const backendURL = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"
+    const backendURL = process.env.API_PATH || process.env.NEXT_PUBLIC_API_PATH || "http://localhost:3000"
     
     try {
       const response = await fetch(`${backendURL}/admin/login`, {
