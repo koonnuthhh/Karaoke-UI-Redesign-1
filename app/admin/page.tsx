@@ -1,40 +1,35 @@
 "use client"
 
-import type React from "react"
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Calendar, Users, DoorOpen, Gift, LogOut, AlertCircle } from "lucide-react"
+import { Calendar, Users, DoorOpen, Gift, BookOpen } from "lucide-react"
 import { useAdminAuth } from "hooks/use-admin-auth"
+import { AdminLogin } from "@/components/AdminLogin"
+import { AdminHeader } from "@/components/AdminHeader"
 import { OverallDashboard } from "@/components/admin/overall-dashboard"
 import { AdminsTab } from "@/components/admin/admins-tab"
 import { RoomsTab } from "@/components/admin/rooms-tab"
 import { PromotionsTab } from "@/components/admin/promotions-tab"
+import { BookingsTab } from "@/components/admin/bookings-tab"
 import type { Admin, Room, Promotion } from "@/types"
 
-type TabType = "login" | "dashboard" | "admins" | "rooms" | "promotions"
+type TabType = "dashboard" | "admins" | "rooms" | "promotions" | "bookings"
 
 export default function AdminPanel() {
   const router = useRouter()
-  const { adminCredential, isLoading: authLoading, isAuthenticated, login, logout } = useAdminAuth()
-  const [activeTab, setActiveTab] = useState<TabType>("login")
-  const [credentials, setCredentials] = useState({ username: "", password: "" })
-  const [error, setError] = useState("")
-  const [loading, setLoading] = useState(false)
+  const { isLoading: authLoading, isAuthenticated, logout, login } = useAdminAuth()
+  const [activeTab, setActiveTab] = useState<TabType>("dashboard")
 
-  // Data states
   const [admins, setAdmins] = useState<Admin[]>([])
   const [rooms, setRooms] = useState<Room[]>([])
   const [promotions, setPromotions] = useState<Promotion[]>([])
   const [dataLoading, setDataLoading] = useState(false)
 
   useEffect(() => {
-    if (isAuthenticated && adminCredential) {
-      setActiveTab("dashboard")
+    if (isAuthenticated) {
       fetchAllData()
-    } else if (!authLoading) {
-      setActiveTab("login")
     }
-  }, [isAuthenticated, adminCredential, authLoading])
+  }, [isAuthenticated])
 
   const fetchAllData = async () => {
     setDataLoading(true)
@@ -48,7 +43,6 @@ export default function AdminPanel() {
         fetch("/api/admin/promotions", { headers })
       ])
 
-      // Fetch admins with separate endpoint that gets all admins
       const adminsRes = await fetch("/api/admin/list", { headers })
 
       if (adminsRes.ok) {
@@ -70,154 +64,57 @@ export default function AdminPanel() {
     }
   }
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError("")
-    setLoading(true)
-
-    try {
-      const res = await fetch("/api/admin", {
-        method: "GET",
-        headers: {
-          username: credentials.username,
-          password: credentials.password
-        }
-      })
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}))
-        throw new Error(errData.message || "Login failed")
-      }
-
-      const data = await res.json()
-      if (data.success && data.credential) {
-        login(data.credential)
-        setCredentials({ username: "", password: "" })
-      } else {
-        throw new Error(data.message || "Invalid credentials")
-      }
-    } catch (err: any) {
-      setError(err.message || "Something went wrong")
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const handleLogout = () => {
     logout()
-    setActiveTab("login")
+  }
+
+  const handleLoginSuccess = () => {
+    setActiveTab("dashboard")
   }
 
   // Show loading state
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center">
-          <Calendar className="w-12 h-12 text-purple-600 mx-auto mb-4 animate-spin" />
-          <p className="text-gray-600">Loading...</p>
+          <Calendar className="w-12 h-12 text-blue-600 mx-auto mb-4 animate-spin" />
+          <p className="text-slate-600">Loading...</p>
         </div>
       </div>
     )
   }
 
-  // Login screen
-  if (!isAuthenticated || !adminCredential) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="bg-white p-8 rounded-lg shadow-lg w-96">
-          <div className="text-center mb-6">
-            <Calendar className="w-12 h-12 text-purple-600 mx-auto mb-4" />
-            <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard Login</h1>
-            <p className="text-gray-600 mt-2">Access admin panel</p>
-          </div>
-
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
-              <input
-                type="text"
-                value={credentials.username}
-                onChange={(e) => setCredentials((prev) => ({ ...prev, username: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-              <input
-                type="password"
-                value={credentials.password}
-                onChange={(e) => setCredentials((prev) => ({ ...prev, password: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                required
-              />
-            </div>
-            {error && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-md">
-                <p className="text-sm text-red-600">{error}</p>
-              </div>
-            )}
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-purple-600 text-white py-2 rounded-md hover:bg-purple-700 transition-colors disabled:opacity-50"
-            >
-              {loading ? "Logging in..." : "Login"}
-            </button>
-          </form>
-        </div>
-      </div>
-    )
+  // Show login screen if not authenticated
+  if (!isAuthenticated) {
+    return <AdminLogin onLoginSuccess={handleLoginSuccess} login={login} />
   }
 
   // Main admin dashboard
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
-            <div className="flex gap-3">
-              <button
-                onClick={() => router.push("/")}
-                className="px-4 py-2 font-semibold text-white rounded-md transition-colors"
-                style={{ backgroundColor: "#8b5cf6" }}
-              >
-                Time Table
-              </button>
-              <button
-                onClick={handleLogout}
-                className="px-4 py-2 font-semibold text-white rounded-md transition-colors flex items-center gap-2"
-                style={{ backgroundColor: "#dc2626" }}
-              >
-                <LogOut className="w-4 h-4" /> Logout
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-slate-50">
+      <AdminHeader onLogout={handleLogout} />
 
       {/* Navigation Tabs */}
-      <div className="bg-white border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex gap-8">
+      <div className="bg-white border-b border-slate-200 overflow-x-auto">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8">
+          <div className="flex gap-4 sm:gap-8 min-w-min">
             {[
               { id: "dashboard", label: "Dashboard" },
               { id: "admins", label: "Admins", icon: <Users className="w-4 h-4" /> },
               { id: "rooms", label: "Rooms", icon: <DoorOpen className="w-4 h-4" /> },
+              { id: "bookings", label: "Bookings", icon: <BookOpen className="w-4 h-4" /> },
               { id: "promotions", label: "Promotions", icon: <Gift className="w-4 h-4" /> }
             ].map((tab: any) => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
+                onClick={() => setActiveTab(tab.id as TabType)}
+                className={`py-4 px-3 sm:px-4 border-b-2 font-medium text-xs sm:text-sm flex items-center gap-1.5 sm:gap-2 transition whitespace-nowrap ${
                   activeTab === tab.id
-                    ? "border-purple-600 text-purple-600"
-                    : "border-transparent text-gray-500 hover:text-gray-700"
+                    ? "border-blue-600 text-blue-600"
+                    : "border-transparent text-slate-500 hover:text-slate-700"
                 }`}
               >
-                {tab.icon} {tab.label}
+                {tab.icon} <span>{tab.label}</span>
               </button>
             ))}
           </div>
@@ -225,8 +122,7 @@ export default function AdminPanel() {
       </div>
 
       {/* Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Dashboard Tab */}
+      <main className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-8">
         {activeTab === "dashboard" && (
           <OverallDashboard
             admins={admins}
@@ -234,39 +130,43 @@ export default function AdminPanel() {
             promotions={promotions}
             onNavigateToAdmins={() => setActiveTab("admins")}
             onNavigateToRooms={() => setActiveTab("rooms")}
+            onNavigateToCalendar={() => router.push("/")}
           />
         )}
 
-        {/* Admins Tab */}
         {activeTab === "admins" && (
           <AdminsTab
             admins={admins}
             dataLoading={dataLoading}
-            adminCredential={adminCredential}
+            adminCredential="current"
             onRefresh={fetchAllData}
           />
         )}
 
-        {/* Rooms Tab */}
         {activeTab === "rooms" && (
           <RoomsTab
             rooms={rooms}
             dataLoading={dataLoading}
-            adminCredential={adminCredential}
+            adminCredential="current"
             onRefresh={fetchAllData}
           />
         )}
 
-        {/* Promotions Tab */}
         {activeTab === "promotions" && (
           <PromotionsTab
             promotions={promotions}
             dataLoading={dataLoading}
-            adminCredential={adminCredential}
+            adminCredential="current"
+            onRefresh={fetchAllData}
+          />
+        )}
+
+        {activeTab === "bookings" && (
+          <BookingsTab
+            dataLoading={dataLoading}
             onRefresh={fetchAllData}
           />
         )}
       </main>
     </div>
-  )
-}
+  )}

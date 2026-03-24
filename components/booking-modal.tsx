@@ -227,7 +227,7 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData}: B
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center justify-between p-6 border-b" style={{ borderColor: '#e5e7eb' }}>
-            <h2 className="text-xl font-bold" style={{ color: siteConfig.theme.maintext }}>{siteConfig.content.booking.modalTitle}</h2>
+            <h2 className="text-xl font-bold" style={{ color: siteConfig.theme.maintext }}>{"Book Your Karaoke Session"}</h2>
             <button 
               onClick={onClose} 
               className="transition-colors"
@@ -437,7 +437,7 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData}: B
                   onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e5e7eb'}
                   onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
                 >
-                  {siteConfig.content.booking.cancelButton}
+                  {"Cancel"}
                 </button>
                 <button
                   type="submit"

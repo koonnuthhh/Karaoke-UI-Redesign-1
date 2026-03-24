@@ -1,8 +1,8 @@
 export interface Room {
   room_id: string
   room_name: string
-  capacity: string
   price_per_half_hour: number
+  is_active: boolean
   features: string[]
   color: string
 }
@@ -22,6 +22,8 @@ export interface TimeSlot {
   customerID: string
   price?: number
   duration: number // in minutes
+  created_at?: string
+  updated_at?: string
 }
 
 export interface BookingRequest {
@@ -43,6 +45,14 @@ export interface ScheduleData {
   timeSlots: string[]
   rooms: Room[]
   bookings: TimeSlot[]
+}
+
+export interface AdminUser {
+  admin_id: string
+  username: string
+  email: string
+  role: "admin" | "modulator"
+  login_time?: string
 }
 
 export interface AdminBooking {
@@ -70,9 +80,38 @@ export interface AdminStats {
 }
 
 export interface Admin {
-  id: string
+  admin_id?: string
+  id?: string
   name: string
   username: string
   password?: string
   role: string
+}
+export interface Promotion {
+  id?: string
+  code: string
+  pro_name?: string
+  name?: string  // Legacy support
+  description?: string
+  type?: "percentage_discount" | "flat_discount" | "buy_x_get_y"
+  discount_percent?: number
+  discount_value?: number
+  discount?: number  // Legacy support
+  buy_x_hour?: number
+  get_y_hour?: number
+  start_date?: string
+  startDate?: string  // Legacy support
+  end_date?: string
+  endDate?: string  // Legacy support
+  start_time?: string
+  end_time?: string
+  is_active?: boolean
+  isActive?: boolean  // Legacy support
+  is_room_specific?: boolean
+  max_usage?: number
+  maxUses?: number  // Legacy support
+  used_count?: number
+  usedCount?: number  // Legacy support
+  created_by?: string
+  discountType?: string  // Legacy support
 }

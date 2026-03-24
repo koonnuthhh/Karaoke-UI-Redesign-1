@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react"
+import type { AdminUser } from "@/types"
+import { getAdminUser, setAdminUser, clearAdminUser, loginAdmin, logoutAdmin } from "@/lib/admin-service"
 
 export interface AdminAuthState {
-  adminCredential: string | null
+  adminUser: AdminUser | null
   isLoading: boolean
   isAuthenticated: boolean
   error: string | null
@@ -9,71 +11,38 @@ export interface AdminAuthState {
 
 export function useAdminAuth() {
   const [authState, setAuthState] = useState<AdminAuthState>({
-    adminCredential: null,
+    adminUser: null,
     isLoading: true,
     isAuthenticated: false,
     error: null,
   })
 
-  // Check and validate stored credential on mount
+  // Check stored admin user on mount
   useEffect(() => {
-    const validateStoredCredential = async () => {
+    const checkStoredUser = () => {
       try {
-        const storedCredential = localStorage.getItem("admin_credential")
-
-        if (!storedCredential) {
+        const storedUser = getAdminUser()
+        
+        if (storedUser) {
           setAuthState({
-            adminCredential: null,
+            adminUser: storedUser,
             isLoading: false,
-            isAuthenticated: false,
+            isAuthenticated: true,
             error: null,
           })
-          return
-        }
-
-        // Validate credential with backend
-        const res = await fetch("/api/admin/validate", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            credential: storedCredential,
-          },
-        })
-
-        if (res.ok) {
-          const data = await res.json()
-          if (data.success) {
-            setAuthState({
-              adminCredential: storedCredential,
-              isLoading: false,
-              isAuthenticated: true,
-              error: null,
-            })
-          } else {
-            // Invalid credential
-            localStorage.removeItem("admin_credential")
-            setAuthState({
-              adminCredential: null,
-              isLoading: false,
-              isAuthenticated: false,
-              error: "Session expired. Please login again.",
-            })
-          }
         } else {
-          // Backend error or credential invalid
-          localStorage.removeItem("admin_credential")
           setAuthState({
-            adminCredential: null,
+            adminUser: null,
             isLoading: false,
             isAuthenticated: false,
             error: null,
           })
         }
       } catch (error) {
-        console.error("Auth validation error:", error)
-        localStorage.removeItem("admin_credential")
+        console.error("Auth check error:", error)
+        clearAdminUser()
         setAuthState({
-          adminCredential: null,
+          adminUser: null,
           isLoading: false,
           isAuthenticated: false,
           error: null,
@@ -81,40 +50,70 @@ export function useAdminAuth() {
       }
     }
 
-    validateStoredCredential()
+    checkStoredUser()
   }, [])
 
-  const login = (credential: string) => {
-    localStorage.setItem("admin_credential", credential)
-    setAuthState({
-      adminCredential: credential,
-      isLoading: false,
-      isAuthenticated: true,
-      error: null,
-    })
+  const login = async (username: string, password: string) => {
+    setAuthState((prev) => ({ ...prev, isLoading: true, error: null }))
+    
+    try {
+      const response = await loginAdmin(username, password)
+      
+      if (response.success && response.data) {
+        const adminUser: AdminUser = {
+          admin_id: response.data.admin_id,
+          username: response.data.username,
+          email: response.data.email,
+          role: response.data.role,
+          login_time: response.data.login_time,
+        }
+        setAdminUser(adminUser)
+        setAuthState({
+          adminUser,
+          isLoading: false,
+          isAuthenticated: true,
+          error: null,
+        })
+        return { success: true }
+      } else {
+        const errorMsg = response.error?.message || "Login failed"
+        setAuthState((prev) => ({
+          ...prev,
+          isLoading: false,
+          error: errorMsg,
+        }))
+        return { success: false, error: errorMsg }
+      }
+    } catch (error: any) {
+      const errorMsg = error.message || "An error occurred during login"
+      console.error("Login error:", error)
+      setAuthState((prev) => ({
+        ...prev,
+        isLoading: false,
+        error: errorMsg,
+      }))
+      return { success: false, error: errorMsg }
+    }
   }
 
   const logout = () => {
-    localStorage.removeItem("admin_credential")
+    logoutAdmin()
     setAuthState({
-      adminCredential: null,
+      adminUser: null,
       isLoading: false,
       isAuthenticated: false,
       error: null,
     })
   }
 
-  const clearError = () => {
-    setAuthState(prev => ({
-      ...prev,
-      error: null,
-    }))
-  }
-
   return {
-    ...authState,
+    adminUser: authState.adminUser,
+    adminCredential: authState.adminUser?.admin_id || null,
+    isLoading: authState.isLoading,
+    isAuthenticated: authState.isAuthenticated,
+    error: authState.error,
     login,
     logout,
-    clearError,
   }
 }
+

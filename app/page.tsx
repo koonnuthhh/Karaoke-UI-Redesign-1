@@ -73,23 +73,13 @@ export default function HomePage(
             <div className="flex-grow">
               <h1 className="text-3xl font-bold text-gray-900 mb-2">{siteConfig.business.name}</h1>
               <p className="text-lg text-gray-600">{siteConfig.business.tagline}</p>
-              {adminCredential && <p className="text-sm text-purple-600 font-medium">Admin Dashboard</p>}
+              {adminCredential && <p className="text-sm text-purple-600 font-medium">Admin Table</p>}
             </div>
           </div>
           
           {/* Admin Navigation Buttons */}
           {adminCredential && (
             <div className="flex justify-end gap-3 flex-wrap">
-              <button
-                onClick={handleRefresh}
-                className="px-4 py-2 font-semibold text-white rounded-md shadow transition-colors hover:opacity-90"
-                style={{
-                  backgroundColor: siteConfig.theme.primary,
-                  border: "none",
-                }}
-              >
-                Dashboard
-              </button>
               <button
                 onClick={() => router.push("/admin")}
                 className="px-4 py-2 font-semibold text-white rounded-md shadow transition-colors hover:opacity-90"

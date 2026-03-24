@@ -46,11 +46,11 @@ export async function GET(request: NextRequest) {
         },
       },
     )
+
     const rawResponseroomdata = await responseroomdata.json()
-    //console.log("rawResponseroomdata : ", rawResponseroomdata)
     const roomData = rawResponseroomdata.data || []
-    console.log("Fetched Rooms:", roomData.length)
-    //console.log("Fetched RoomID:", roomData.room_id)
+
+
     const responsebooked = await fetch(
       `${process.env.API_PATH}/booking/date/${date}`,
       {
@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
 
     const rawResponsebooked = await responsebooked.json()
     const rawData = rawResponsebooked.data || []
-    console.log("Fetched bookings:", rawData.length)
+    // console.log("Fetched bookings:", rawData.length)
     //console.log(rawData)
 
 

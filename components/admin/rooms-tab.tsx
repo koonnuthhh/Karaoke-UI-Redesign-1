@@ -1,7 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { Edit, Trash2, Plus, AlertCircle } from "lucide-react"
+import { Edit, Trash2, Plus, AlertCircle, X } from "lucide-react"
+import { adminAPI, getAdminUser } from "@/lib/admin-service"
 import type { Room } from "@/types"
 
 interface RoomsTabProps {
@@ -22,24 +23,24 @@ export function RoomsTab({ rooms, dataLoading, adminCredential, onRefresh }: Roo
     try {
       setIsSubmitting(true)
       setError("")
-      const res = await fetch("/api/admin/rooms", {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(formData)
-      })
       
-      const data = await res.json()
-      if (res.ok) {
+      const adminUser = getAdminUser()
+      if (!adminUser) {
+        setError("Authentication required. Please login again.")
+        return
+      }
+
+      const result = await adminAPI.createRoom(formData)
+      
+      if (result.success || result.data) {
         setModalOpen(null)
         setFormData({})
         onRefresh()
       } else {
-        setError(data.message || "Failed to create room")
+        setError(result.message || result.error?.message || "Failed to create room")
       }
-    } catch (err) {
-      setError("Network error while creating room")
+    } catch (err: any) {
+      setError(err.message || "Error creating room")
     } finally {
       setIsSubmitting(false)
     }
@@ -49,32 +50,38 @@ export function RoomsTab({ rooms, dataLoading, adminCredential, onRefresh }: Roo
     try {
       setIsSubmitting(true)
       setError("")
-      const res = await fetch(`/api/admin/rooms/${selectedRoom?.room_id}`, {
-        method: "PUT",
-        headers: { 
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ data: formData })
-      })
       
-      const data = await res.json()
-      if (res.ok) {
+      const adminUser = getAdminUser()
+      if (!adminUser) {
+        setError("Authentication required. Please login again.")
+        return
+      }
+
+      if (!selectedRoom?.room_id) {
+        setError("Invalid room ID")
+        return
+      }
+
+      const result = await adminAPI.updateRoom(selectedRoom.room_id, formData)
+      
+      if (result.success || result.data) {
         setModalOpen(null)
         setFormData({})
         setSelectedRoom(null)
         onRefresh()
       } else {
-        setError(data.message || "Failed to update room")
+        setError(result.message || result.error?.message || "Failed to update room")
       }
-    } catch (err) {
-      setError("Network error while updating room")
+    } catch (err: any) {
+      setError(err.message || "Error updating room")
     } finally {
       setIsSubmitting(false)
     }
   }
 
   const handleDeleteRoom = async () => {
-    if (!adminCredential) {
+    const adminUser = getAdminUser()
+    if (!adminUser) {
       setError("Authentication required. Please login again.")
       return
     }
@@ -87,21 +94,15 @@ export function RoomsTab({ rooms, dataLoading, adminCredential, onRefresh }: Roo
     try {
       setIsSubmitting(true)
       setError("")
-      const res = await fetch(`/api/admin/rooms/${selectedRoom.room_id}`, {
-        method: "DELETE",
-        headers: { 
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ data: { admin_id: adminCredential } })
-      })
       
-      const data = await res.json()
-      if (res.ok) {
+      const result = await adminAPI.deleteRoom(selectedRoom.room_id)
+      
+      if (result.success || result.data) {
         setModalOpen(null)
         setSelectedRoom(null)
         onRefresh()
       } else {
-        const message = data.message || "Failed to delete room"
+        const message = result.message || result.error?.message || "Failed to delete room"
         setError(message === "NOT_FOUND" ? "Room not found or already deleted" : message)
       }
     } catch (err) {
@@ -114,41 +115,48 @@ export function RoomsTab({ rooms, dataLoading, adminCredential, onRefresh }: Roo
   return (
     <>
       <div>
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-bold text-gray-900">Manage Rooms</h2>
-          <button
-            onClick={() => {
-              setModalOpen("create")
-              setSelectedRoom(null)
-              setFormData({})
-              setError("")
-            }}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-          >
-            <Plus className="w-4 h-4" /> Create Room
-          </button>
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-0 mb-4 sm:mb-6">
+          <h2 className="text-lg sm:text-xl font-bold text-gray-900">Manage Rooms</h2>
+          {getAdminUser()?.role === "admin" && (
+            <button
+              onClick={() => {
+                setModalOpen("create")
+                setSelectedRoom(null)
+                setFormData({})
+                setError("")
+              }}
+              className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-green-600 text-white text-sm sm:text-base rounded-md hover:bg-green-700 transition w-full sm:w-auto justify-center sm:justify-start"
+            >
+              <Plus className="w-4 h-4" /> Create Room
+            </button>
+          )}
         </div>
 
         {dataLoading ? (
-          <div className="text-center py-8">Loading...</div>
+          <div className="text-center py-8 text-sm text-gray-600">Loading...</div>
         ) : (
           <div className="bg-white rounded-lg shadow overflow-hidden">
-            <table className="w-full">
-              <thead className="bg-gray-100">
-                <tr>
-                  <th className="px-6 py-3 text-left text-sm font-medium text-gray-900">Room Name</th>
-                  <th className="px-6 py-3 text-left text-sm font-medium text-gray-900">Capacity</th>
-                  <th className="px-6 py-3 text-left text-sm font-medium text-gray-900">Price/30min</th>
-                  <th className="px-6 py-3 text-right text-sm font-medium text-gray-900">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {Array.isArray(rooms) ? rooms.map((room) => (
-                  <tr key={room.room_id}>
-                    <td className="px-6 py-4 text-sm text-gray-900">{room.room_name}</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">{room.capacity}</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">฿{room.price_per_half_hour}</td>
-                    <td className="px-6 py-4 text-right text-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-100">
+                  <tr>
+                    <th className="px-3 sm:px-6 py-3 text-left text-xs sm:text-sm font-medium text-gray-900">Room Name</th>
+                    <th className="px-3 sm:px-6 py-3 text-left text-xs sm:text-sm font-medium text-gray-900">Price/30min</th>
+                    <th className="px-3 sm:px-6 py-3 text-left text-xs sm:text-sm font-medium text-gray-900">Active</th>
+                    <th className="px-3 sm:px-6 py-3 text-right text-xs sm:text-sm font-medium text-gray-900">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {Array.isArray(rooms) ? rooms.map((room) => (
+                    <tr key={room.room_id}>
+                      <td className="px-3 sm:px-6 py-2 sm:py-4 text-xs sm:text-sm text-gray-900">{room.room_name}</td>
+                      <td className="px-3 sm:px-6 py-2 sm:py-4 text-xs sm:text-sm text-gray-600">฿{room.price_per_half_hour}</td>
+                      <td className="px-3 sm:px-6 py-2 sm:py-4 text-xs sm:text-sm">
+                        <span className={`px-2 py-1 rounded text-white text-xs font-medium ${room.is_active ? 'bg-green-500' : 'bg-gray-500'}`}>
+                          {room.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
+                      <td className="px-3 sm:px-6 py-2 sm:py-4 text-right text-xs sm:text-sm">
                       <button
                         onClick={() => {
                           setSelectedRoom(room)
@@ -160,74 +168,96 @@ export function RoomsTab({ rooms, dataLoading, adminCredential, onRefresh }: Roo
                       >
                         <Edit className="w-4 h-4" />
                       </button>
-                      <button
-                        onClick={() => {
-                          setSelectedRoom(room)
-                          setModalOpen("delete")
-                          setError("")
-                        }}
-                        className="text-red-600 hover:text-red-900"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {getAdminUser()?.role === "admin" && (
+                        <button
+                          onClick={() => {
+                            setSelectedRoom(room)
+                            setModalOpen("delete")
+                            setError("")
+                          }}
+                          className="text-red-600 hover:text-red-900"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 )) : (
                   <tr key="no-rooms">
-                    <td colSpan={4} className="px-6 py-4 text-center text-gray-500">
+                    <td colSpan={4} className="px-3 sm:px-6 py-2 sm:py-4 text-center text-xs sm:text-sm text-gray-500">
                       No rooms found
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </div>
 
       {/* Create/Edit Room Modal */}
-      {(modalOpen === "create" || modalOpen === "edit") && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-96 max-h-96 overflow-y-auto">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">
-              {modalOpen === "create" ? "Create New Room" : "Edit Room"}
-            </h3>
-            <div className="space-y-4">
+      {(modalOpen === "create" || modalOpen === "edit") && (() => {
+        const currentAdmin = getAdminUser()
+        const isAuthorized = currentAdmin?.role === "admin"
+        const isCreateMode = modalOpen === "create"
+        
+        return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-3 sm:mb-4">
+              <h3 className="text-base sm:text-lg font-bold text-gray-900">
+                {isCreateMode ? "Create New Room" : "Edit Room"}
+              </h3>
+              <button
+                onClick={() => {
+                  setModalOpen(null)
+                  setFormData({})
+                  setSelectedRoom(null)
+                  setError("")
+                }}
+                className="text-gray-500 hover:text-gray-700 flex-shrink-0"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            {!isCreateMode && !isAuthorized && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-md p-2 sm:p-3 mb-3 sm:mb-4">
+                <p className="text-xs sm:text-sm text-yellow-800">You don't have permission to edit this room. Viewing in read-only mode.</p>
+              </div>
+            )}
+            <div className="space-y-3 sm:space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Room Name</label>
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Room Name</label>
                 <input
                   type="text"
                   value={formData.room_name || ""}
                   onChange={(e) => setFormData({ ...formData, room_name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  disabled={!isCreateMode && !isAuthorized}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Capacity</label>
-                <input
-                  type="text"
-                  value={formData.capacity || ""}
-                  onChange={(e) => setFormData({ ...formData, capacity: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Price per 30 min</label>
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Price per 30 min</label>
                 <input
                   type="number"
                   value={formData.price_per_half_hour || ""}
                   onChange={(e) => setFormData({ ...formData, price_per_half_hour: parseFloat(e.target.value) })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  disabled={!isCreateMode && !isAuthorized}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Features (comma separated)</label>
-                <input
-                  type="text"
-                  value={Array.isArray(formData.features) ? formData.features.join(", ") : ""}
-                  onChange={(e) => setFormData({ ...formData, features: e.target.value.split(",").map(f => f.trim()) })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-1">Active Status</label>
+                <select
+                  value={formData.is_active ? "active" : "inactive"}
+                  onChange={(e) => setFormData({ ...formData, is_active: e.target.value === "active" })}
+                  disabled={!isCreateMode && !isAuthorized}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                >
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
               </div>
             </div>
             {error && <p className="text-red-600 mt-3 text-sm">{error}</p>}
@@ -236,23 +266,26 @@ export function RoomsTab({ rooms, dataLoading, adminCredential, onRefresh }: Roo
                 onClick={() => {
                   setModalOpen(null)
                   setFormData({})
+                  setSelectedRoom(null)
                   setError("")
                 }}
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
               >
-                Cancel
+                Go Back
               </button>
-              <button
-                onClick={modalOpen === "create" ? handleCreateRoom : handleUpdateRoom}
-                disabled={isSubmitting}
-                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
-              >
-                {isSubmitting ? "Saving..." : modalOpen === "create" ? "Create" : "Update"}
-              </button>
+              {(isCreateMode || isAuthorized) && (
+                <button
+                  onClick={isCreateMode ? handleCreateRoom : handleUpdateRoom}
+                  disabled={isSubmitting}
+                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
+                >
+                  {isSubmitting ? "Saving..." : isCreateMode ? "Create" : "Update"}
+                </button>
+              )}
             </div>
           </div>
         </div>
-      )}
+      )})()}
 
       {/* Delete Confirmation Modal */}
       {modalOpen === "delete" && (

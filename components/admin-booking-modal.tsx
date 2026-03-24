@@ -7,6 +7,8 @@ import type { TimeSlot, Room, ScheduleData, BookingRequest } from "../types"
 import { calculatePrice, formatDuration, isTimeSlotAvailable } from "../lib/time-utils"
 import { LoadingSpinner } from "../components/ui/loading-spinner"
 import { AlertModal } from "./AlertModal"
+import { PromoInput } from "./promo-input"
+import { getAdminUser } from "../lib/admin-service"
 
 interface AdminBookingModalProps {
     isOpen: boolean
@@ -19,6 +21,10 @@ interface AdminBookingModalProps {
 export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleData, adminCredential }: AdminBookingModalProps) {
     const [startTime, setStartTime] = useState(timeSlot.startTime)
     const [endTime, setEndTime] = useState("")
+    const [customPrice, setCustomPrice] = useState<number | null>(null)
+    const [discount, setDiscount] = useState<{ original_price: number; discount_amount: number; final_price: number } | null>(null)
+    const [appliedPromoCode, setAppliedPromoCode] = useState<string | null>(null)
+    const [appliedPromotionId, setAppliedPromotionId] = useState<string | null>(null)
     const [formData, setFormData] = useState({
         customerName: "",
         customerEmail: "",
@@ -28,6 +34,9 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [error, setError] = useState("")
     const [showConfirmCancel, setShowConfirmCancel] = useState(false)
+    const currentUser = getAdminUser()
+    const isModulator = currentUser?.role === "modulator"
+    
     const bookedSlot = timeSlot.status === "booked"
         ? scheduleData.bookings.find(b => b.id === timeSlot.id)
         : null
@@ -97,6 +106,16 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
         }
     }, [isOpen, startTime, scheduleData.timeSlots]);
 
+    // Reset custom price and discount when modal opens
+    useEffect(() => {
+        if (isOpen) {
+            setCustomPrice(null)
+            setDiscount(null)
+            setAppliedPromoCode(null)
+            setAppliedPromotionId(null)
+        }
+    }, [isOpen]);
+
     const totalDuration = startTime && endTime
         ? (() => {
             let endTimeDate = endTime < "06:00" ? new Date(`2000-01-02T${endTime}`) : new Date(`2000-01-01T${endTime}`)
@@ -105,7 +124,41 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
         })()
         : 0
 
-    const totalPrice = calculatePrice(room.price_per_half_hour, totalDuration)
+    const calculatedPrice = calculatePrice(room.price_per_half_hour, totalDuration)
+
+    // Automatically recalculate discount when custom price changes
+    useEffect(() => {
+        if (appliedPromoCode) {
+            const priceToUse = customPrice !== null && customPrice >= 0 ? customPrice : calculatedPrice
+            const reapplyPromo = async () => {
+                try {
+                    const response = await fetch("/api/user/promotions/apply", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            data: {
+                                code: appliedPromoCode,
+                                total_price: priceToUse,
+                            },
+                        }),
+                    })
+                    const result = await response.json()
+                    if (result.success && result.data) {
+                        setDiscount({
+                            original_price: priceToUse,
+                            discount_amount: result.data.discount_amount,
+                            final_price: result.data.final_price
+                        })
+                    }
+                } catch (err) {
+                    // Silently fail - keep existing discount
+                }
+            }
+            reapplyPromo()
+        }
+    }, [customPrice, appliedPromoCode, calculatedPrice]);
+    const priceBeforeDiscount = customPrice !== null && customPrice >= 0 ? customPrice : calculatedPrice
+    const finalPrice = discount ? discount.final_price : priceBeforeDiscount
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         setFormData(prev => ({
@@ -128,7 +181,7 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                 roomName: timeSlot.roomName,
                 date: timeSlot.date,
                 timeSlots: [startTime, endTime],
-                totalPrice,
+                totalPrice: finalPrice,
                 duration: totalDuration,
                 ...formData,
             }
@@ -149,7 +202,8 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                 headers: { "Content-Type": "application/json", "credential": adminCredential ? adminCredential : "" },
                 body: JSON.stringify({
                     booking_id: createResult.data.booking_id,
-                    booking_status: "booked"
+                    booking_status: "booked",
+                    ...(appliedPromotionId && { promotion_id: appliedPromotionId }),
                 })
             })
             const updateResult = await updateRes.json()
@@ -202,6 +256,33 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
     }
 
     if (!isOpen) return null
+
+    // Show permission denied message for moderators
+    if (isModulator) {
+        return (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                <div className="bg-white rounded-lg max-w-md w-full" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center justify-between p-6 border-b">
+                        <h2 className="text-xl font-bold">Access Denied</h2>
+                        <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+                            <X className="w-6 h-6" />
+                        </button>
+                    </div>
+                    <div className="p-6">
+                        <p className="text-gray-600 mb-4">
+                            You don't have permission to manage bookings. Only admins can create or cancel bookings.
+                        </p>
+                        <button
+                            onClick={onClose}
+                            className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                        >
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )
+    }
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -274,7 +355,16 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                                 <p><span className="font-medium">Date:</span> {new Date(timeSlot.date).toLocaleDateString()}</p>
                                 <p><span className="font-medium">Time:</span> {startTime && endTime ? `${startTime} - ${endTime}` : "Not selected"}</p>
                                 <p><span className="font-medium">Duration:</span> {formatDuration(totalDuration)}</p>
-                                <p><span className="font-medium">Total Price:</span> ฿{totalPrice.toFixed(2)}</p>
+                                <p><span className="font-medium">Original Price:</span> ฿{calculatedPrice.toFixed(2)}</p>
+                                {customPrice !== null && (
+                                    <p className="text-blue-600"><span className="font-medium">Custom Price:</span> ฿{customPrice.toFixed(2)}</p>
+                                )}
+                                {discount && (
+                                    <div className="mt-2 pt-2 border-t border-purple-200">
+                                        <p className="text-green-600"><span className="font-medium">Discount:</span> -฿{discount.discount_amount.toFixed(2)}</p>
+                                        <p className="font-bold text-lg text-green-600"><span className="font-medium">After Discount:</span> ฿{discount.final_price.toFixed(2)}</p>
+                                    </div>
+                                )}
                                 {/* <p><span className="font-medium">Capacity:</span> {room.capacity}</p> */}
                             </div>
 
@@ -292,7 +382,47 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Phone *</label>
                                     <input name="customerPhone" value={formData.customerPhone} onChange={handleInputChange} required className="w-full px-3 py-2 border border-gray-300 rounded-md" />
                                 </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Price (Leave blank to use original: ฿{calculatedPrice.toFixed(2)})
+                                        {appliedPromoCode && <span className="text-green-600 text-xs ml-2">(Promo will auto-update)</span>}
+                                    </label>
+                                    <input
+                                        type="number"
+                                        value={customPrice !== null ? customPrice : ""}
+                                        onChange={(e) => {
+                                            const value = e.target.value;
+                                            setCustomPrice(value === "" ? null : parseFloat(value));
+                                        }}
+                                        min="0"
+                                        step="0.01"
+                                        placeholder={calculatedPrice.toFixed(2)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                                    />
+                                </div>
                             </div>
+
+                            {/* Promo Code Section */}
+                            <PromoInput
+                                cartTotal={priceBeforeDiscount}
+                                externalDiscount={discount}
+                                onPromoApplied={(finalPrice, discountAmount, promoCode, promotionId) => {
+                                    if (promoCode === "") {
+                                        // Promo was cleared
+                                        setDiscount(null)
+                                        setAppliedPromoCode(null)
+                                        setAppliedPromotionId(null)
+                                    } else {
+                                        setDiscount({
+                                            original_price: priceBeforeDiscount,
+                                            discount_amount: discountAmount,
+                                            final_price: finalPrice
+                                        })
+                                        setAppliedPromoCode(promoCode)
+                                        setAppliedPromotionId(promotionId || null)
+                                    }
+                                }}
+                            />
 
                             {error && <p className="text-red-600 mt-3">{error}</p>}
 

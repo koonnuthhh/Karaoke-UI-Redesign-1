@@ -39,13 +39,18 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
+    
+    // Check if body is already wrapped with "data" property (from our makeAdminRequest)
+    // If so, pass it as is. Otherwise, wrap it.
+    const requestBody = body.data ? body : { data: body }
+    
     const res = await fetch(`${siteConfig.api.baseURL}/admin/rooms`, {
       method: "POST",
       headers: {
         apikey: `${process.env.API_KEY}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ data: body })
+      body: JSON.stringify(requestBody)
     })
 
     const text = await res.text()
@@ -76,8 +81,15 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     const body = await req.json()
-    const { searchParams } = new URL(req.url)
-    const id = searchParams.get("id")
+    const url = new URL(req.url)
+    
+    // Extract ID from path /api/admin/rooms/[id] or query parameter ?id=
+    const pathParts = url.pathname.split('/')
+    let id = pathParts[pathParts.length - 1]
+    
+    if (!id || id === 'api' || id === 'admin' || id === 'rooms') {
+      id = url.searchParams.get("id")
+    }
 
     if (!id) {
       return NextResponse.json(
@@ -86,13 +98,16 @@ export async function PUT(req: NextRequest) {
       )
     }
 
+    // Check if body is already wrapped with "data" property
+    const requestBody = body.data ? body : { data: body }
+
     const res = await fetch(`${siteConfig.api.baseURL}/rooms/${id}`, {
       method: "PUT",
       headers: {
         apikey: `${process.env.API_KEY}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ data: body })
+      body: JSON.stringify(requestBody)
     })
 
     const text = await res.text()
@@ -123,8 +138,15 @@ export async function PUT(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     const body = await req.json()
-    const { searchParams } = new URL(req.url)
-    const id = searchParams.get("id")
+    const url = new URL(req.url)
+    
+    // Extract ID from path /api/admin/rooms/[id] or query parameter ?id=
+    const pathParts = url.pathname.split('/')
+    let id = pathParts[pathParts.length - 1]
+    
+    if (!id || id === 'api' || id === 'admin' || id === 'rooms') {
+      id = url.searchParams.get("id")
+    }
 
     if (!id) {
       return NextResponse.json(
@@ -133,13 +155,16 @@ export async function DELETE(req: NextRequest) {
       )
     }
 
+    // Check if body is already wrapped with "data" property
+    const requestBody = body.data ? body : { data: body }
+
     const res = await fetch(`${siteConfig.api.baseURL}/rooms/${id}`, {
       method: "DELETE",
       headers: {
         apikey: `${process.env.API_KEY}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ data: body })
+      body: JSON.stringify(requestBody)
     })
 
     const text = await res.text()

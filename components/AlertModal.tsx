@@ -60,7 +60,7 @@ export function AlertModal({ isOpen, message, onClose, actions }: AlertModalProp
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b" style={{ borderColor: '#e5e7eb' }}>
           <h2 className="text-xl font-bold" style={{ color: siteConfig.theme.primary }}>
-            {siteConfig.content.booking.modalTitle}
+            {"Book Your Karaoke Session"}
           </h2>
           <button
             onClick={onClose}

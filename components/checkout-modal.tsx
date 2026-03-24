@@ -4,6 +4,7 @@ import type React from "react"
 import { useState, useEffect, useRef } from "react"
 import { X, Upload, Check, AlertCircle, Loader2 } from "lucide-react"
 import { LoadingSpinner } from "../components/ui/loading-spinner"
+import { PromoInput } from "./promo-input"
 import { BookingRequest } from "types"
 import promptpay from "promptpay-qr"
 import { QRCodeCanvas } from "qrcode.react"
@@ -46,6 +47,9 @@ export function CheckoutModal({ isOpen, onClose, bookingData }: CheckoutModalPro
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const timeoutStartedRef = useRef(false);
   const [isTimeoutExpired, setIsTimeoutExpired] = useState(false);
+  const [discountAmount, setDiscountAmount] = useState(0)
+  const [finalPrice, setFinalPrice] = useState(bookingData.totalPrice);
+  const [promotionId, setPromotionId] = useState<string>("")
 
   // Handle timeout expiration
   useEffect(() => {
@@ -113,16 +117,16 @@ export function CheckoutModal({ isOpen, onClose, bookingData }: CheckoutModalPro
 
       const result = await response.json()
       if (result.success && result.data.booking_id) {
-        // Step 2: Generate QR code for payment
+        // Step 2: Generate QR code for payment (use finalPrice which includes discount)
         const promptPayNumber = siteConfig.payment.promptPayNumber
-        const qrPayload = promptpay(promptPayNumber, { amount: bookingData.totalPrice })
+        const qrPayload = promptpay(promptPayNumber, { amount: finalPrice })
         //console.log('qrCodeUrl: ', qrCodeUrl)
 
         setPaymentData({
           qrPayload,
           promptPayNumber,
           accountName: siteConfig.payment.accountName,
-          amount: bookingData.totalPrice,
+          amount: finalPrice,
           bookingId: result.data.booking_id,
         })
 
@@ -192,6 +196,7 @@ export function CheckoutModal({ isOpen, onClose, bookingData }: CheckoutModalPro
           body: JSON.stringify({
             booking_id: paymentData.bookingId,
             booking_status: "booked",
+            ...(promotionId && { promotion_id: promotionId }),
           }),
         });
 
@@ -210,6 +215,37 @@ export function CheckoutModal({ isOpen, onClose, bookingData }: CheckoutModalPro
       setCurrentStep("slip-upload");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleCancelBooking = async () => {
+    if (!paymentData) return;
+    
+    try {
+      const response = await fetch("/api/bookings", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          booking_id: paymentData.bookingId,
+          booking_status: "cancelled",
+        }),
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        // Reset state and go back to booking step
+        setPaymentData(null);
+        setSlipFile(null);
+        setSlipPreview(null);
+        setCurrentStep("booking");
+        setError("");
+      }
+    } catch (err) {
+      console.error("Failed to cancel booking:", err);
+      setError("Failed to cancel booking. Please try again.");
     }
   };
 
@@ -244,19 +280,44 @@ export function CheckoutModal({ isOpen, onClose, bookingData }: CheckoutModalPro
           <p>
             <span className="font-medium">Phone:</span> {bookingData.customerPhone}
           </p>
-          <p>
-            <span className="font-medium">Total Amount:</span> ฿{bookingData.totalPrice.toFixed(2)}
+          <p className={discountAmount > 0 ? "line-through" : ""}>
+            <span className="font-medium">Original Amount:</span> ฿{bookingData.totalPrice.toFixed(2)}
           </p>
+          {discountAmount > 0 && (
+            <>
+              <p>
+                <span className="font-medium text-green-600">Discount:</span> <span className="text-green-600">-฿{discountAmount.toFixed(2)}</span>
+              </p>
+              <p>
+                <span className="font-medium">Total Amount:</span> <span className="font-bold text-lg text-green-600">฿{finalPrice.toFixed(2)}</span>
+              </p>
+            </>
+          )}
+          {discountAmount === 0 && (
+            <p>
+              <span className="font-medium">Total Amount:</span> ฿{finalPrice.toFixed(2)}
+            </p>
+          )}
         </div>
       </div>
 
+      {/* Promo Input Component */}
+      <PromoInput 
+        cartTotal={bookingData.totalPrice} 
+        onPromoApplied={(newFinalPrice, discount, promoCode, promotionId) => {
+          setFinalPrice(newFinalPrice)
+          setDiscountAmount(discount)
+          setPromotionId(promotionId || "")
+        }}
+      />
+
       {error && (
-        <div className="p-3 border rounded-md mb-4" style={{ backgroundColor: '#fef2f2', borderColor: '#fecaca' }}>
+        <div className="p-3 border rounded-md mb-4 mt-4" style={{ backgroundColor: '#fef2f2', borderColor: '#fecaca' }}>
           <p className="text-sm" style={{ color: siteConfig.theme.error }}>{error}</p>
         </div>
       )}
 
-      <div className="flex gap-3">
+      <div className="flex gap-3 mt-6">
         <button
           type="button"
           onClick={onClose}
@@ -308,7 +369,7 @@ export function CheckoutModal({ isOpen, onClose, bookingData }: CheckoutModalPro
         </div>
 
         <div className="space-y-2" style={{ color: siteConfig.theme.maintext }}>
-          <p className="text-lg font-semibold">Amount to Pay: ฿{paymentData?.amount.toFixed(2)}</p>
+          <p className="text-lg font-semibold">Amount to Pay: ฿{finalPrice.toFixed(2)}</p>
           <p className="text-sm">PromptPay Number: {paymentData?.promptPayNumber}</p>
           <p className="text-sm">Account Name: {paymentData?.accountName}</p>
           <p className="text-sm" style={{ color: '#6b7280' }}>Booking ID: {paymentData?.bookingId}</p>
@@ -331,7 +392,7 @@ export function CheckoutModal({ isOpen, onClose, bookingData }: CheckoutModalPro
 
       <div className="flex gap-3">
         <button
-          onClick={() => setCurrentStep("booking")}
+          onClick={handleCancelBooking}
           className="flex-1 px-4 py-2 rounded-md transition-colors"
           style={{ 
             color: siteConfig.theme.primary, 

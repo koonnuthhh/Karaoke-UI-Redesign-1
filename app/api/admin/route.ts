@@ -19,13 +19,17 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json()
+    
+    // Check if body is already wrapped with "data" property
+    const requestBody = body.data ? body : { data: body }
+    
     const res = await fetch(`${siteConfig.api.baseURL}/admin`, {
       method: "POST",
       headers: {
         apikey: `${process.env.API_KEY}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ data: body })
+      body: JSON.stringify(requestBody)
     })
 
     const text = await res.text()
@@ -57,8 +61,15 @@ export async function POST(req: Request) {
 export async function PUT(req: Request) {
   try {
     const body = await req.json()
-    const { searchParams } = new URL(req.url)
-    const id = searchParams.get("id")
+    const url = new URL(req.url)
+    
+    // Extract ID from path /api/admin/[id] or query parameter ?id=
+    const pathParts = url.pathname.split('/')
+    let id = pathParts[pathParts.length - 1]
+    
+    if (!id || id === 'api' || id === 'admin') {
+      id = url.searchParams.get("id")
+    }
 
     if (!id) {
       return NextResponse.json(
@@ -67,13 +78,25 @@ export async function PUT(req: Request) {
       )
     }
 
+    // Extract the actual data and admin_id from request
+    const updateData = body.data || body
+    const adminId = updateData.admin_id
+    
+    // Create clean request body with only the necessary fields
+    const requestBody = {
+      data: {
+        ...updateData,
+        admin_id: adminId
+      }
+    }
+
     const res = await fetch(`${siteConfig.api.baseURL}/admin/${id}`, {
       method: "PUT",
       headers: {
         apikey: `${process.env.API_KEY}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ data: body })
+      body: JSON.stringify(requestBody)
     })
 
     const text = await res.text()
@@ -105,8 +128,20 @@ export async function PUT(req: Request) {
 export async function DELETE(req: Request) {
   try {
     const body = await req.json()
-    const { searchParams } = new URL(req.url)
-    const id = searchParams.get("id")
+    const url = new URL(req.url)
+    
+    // Extract ID from path /api/admin/[id] or query parameter ?id=
+    const pathParts = url.pathname.split('/')
+    console.log("DELETE route.ts - Full URL:", req.url)
+    console.log("DELETE route.ts - Pathname:", url.pathname)
+    console.log("DELETE route.ts - Path parts:", pathParts)
+    let id = pathParts[pathParts.length - 1]
+    console.log("DELETE route.ts - ID from last part:", id)
+    
+    if (!id || id === 'api' || id === 'admin') {
+      id = url.searchParams.get("id")
+      console.log("DELETE route.ts - ID from query params:", id)
+    }
 
     if (!id) {
       return NextResponse.json(
@@ -115,13 +150,21 @@ export async function DELETE(req: Request) {
       )
     }
 
+    // Extract admin_id from request body and send only that
+    const adminId = body.data?.admin_id
+    const requestBody = {
+      data: {
+        admin_id: adminId
+      }
+    }
+
     const res = await fetch(`${siteConfig.api.baseURL}/admin/${id}`, {
       method: "DELETE",
       headers: {
         apikey: `${process.env.API_KEY}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ data: body })
+      body: JSON.stringify(requestBody)
     })
 
     const text = await res.text()

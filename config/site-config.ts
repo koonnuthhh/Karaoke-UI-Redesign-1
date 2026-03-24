@@ -20,8 +20,8 @@ export const siteConfig = {
   schedule: {
     maximumPrebook: 30,
     slotDuration: 30, // minutes
-    openTime: "12:00",
     closeTime: "01:00",
+    openTime: "12:00",
   },
 
   // Business Hours
@@ -35,27 +35,12 @@ export const siteConfig = {
     sunday: { open: "12:00", close: "01:00", closed: false },
   },
 
-  // Pricing Rules
-
-  // Admin Configuration
-  admin: {
-    username: "admin",
-    password: "karaoke2024", // In production, use proper authentication
-    routes: {
-      dashboard: "/admin",
-      bookings: "/admin/bookings",
-      rooms: "/admin/rooms",
-      settings: "/admin/settings",
-    },
-  },
-
   // UI Configuration
   theme: {
     maintext: "text-grey-400",
-    primary: "rgb(18, 64, 138)", // purple-600
+    primary: "rgb(18, 64, 138)", // purple-600 rgb(18, 64, 138)
     secondary: "rgb(27, 20, 34)", // blue-500
     //rgb(18, 64, 138)
-    accent: "rgb(245, 158, 11)", // amber-500
     success: "rgb(34, 197, 94)", // green-500
     error: "rgb(239, 68, 68)", // red-500
     warning: "rgb(245, 158, 11)", // amber-500
@@ -67,44 +52,9 @@ export const siteConfig = {
     roomclosed:"rgb(150,150,150)"
   },
 
-  // Text Content
-  content: {
-    hero: {
-      // title: "This could be use for Title of promotion",
-      // subtitle: "This could be use for detail!",
-      title: "You can use คนละครึ่ง",
-      subtitle: "Get discounts with the government co-payment scheme",
-    },
-    booking: {
-      modalTitle: "Book Your Karaoke Session",
-      confirmButton: "Confirm Booking",
-      cancelButton: "Cancel",
-      paymentButton: "Proceed to Payment",
-      selectSlots: "Select time slots (minimum 1 slot = 30 minutes)",
-    },
-    schedule: {
-      tableTitle: "Room Availability",
-      noBookings: "No bookings available",
-      loading: "Loading schedule...",
-    },
-    admin: {
-      title: "Admin Dashboard",
-      bookingsTitle: "Manage Bookings",
-      roomsTitle: "Manage Rooms",
-      settingsTitle: "System Settings",
-    },
-  },
-
   // API Configuration
   api: {
     baseURL: process.env.API_PATH || "http://localhost:3000",
-    endpoints: {
-      bookings: "/api/bookings",
-      rooms: "/api/rooms",
-      schedule: "/api/schedule",
-      payment: "/api/payment",
-      admin: "/api/admin",
-    },
     timeout: 10000,
   },
 } as const

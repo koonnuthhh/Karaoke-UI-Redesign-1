@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { siteConfig } from "@/config/site-config"
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const id = params.id
+    const { id } = await params
 
     const res = await fetch(`${siteConfig.api.baseURL}/admin/${id}`, {
       method: "GET",
@@ -38,10 +38,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   }
 }
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const body = await req.json()
-    const id = params.id
+    const { id } = await params
 
     const res = await fetch(`${siteConfig.api.baseURL}/admin/${id}`, {
       method: "PUT",
@@ -77,10 +77,10 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const body = await req.json()
-    const id = params.id
+    const { id } = await params
 
     const res = await fetch(`${siteConfig.api.baseURL}/admin/${id}`, {
       method: "DELETE",

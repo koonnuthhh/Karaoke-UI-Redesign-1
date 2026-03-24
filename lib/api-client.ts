@@ -48,7 +48,7 @@ class ApiClient {
   }
 
   async getSchedule(date: string): Promise<ScheduleData> {
-    return this.request<ScheduleData>(`${siteConfig.api.endpoints.schedule}?date=${date}`)
+    return this.request<ScheduleData>(`/api/schedule?date=${date}`)
   }
 }
 
