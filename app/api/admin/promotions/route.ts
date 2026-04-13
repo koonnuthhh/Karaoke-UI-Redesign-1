@@ -73,6 +73,7 @@ export async function GET(req: NextRequest) {
         maxUses: promo.max_usage || 0,
         max_usage: promo.max_usage,
         is_room_specific: promo.is_room_specific || false,
+        applicable_room_ids: promo.applicable_room_ids || [],
         created_by: promo.created_by,
       }
 
@@ -143,6 +144,7 @@ export async function POST(req: NextRequest) {
       max_usage: promotionData.max_usage || promotionData.maxUses,
       is_active: promotionData.is_active !== undefined ? promotionData.is_active : promotionData.isActive,
       is_room_specific: promotionData.is_room_specific || false,
+      applicable_room_ids: promotionData.applicable_room_ids || [],
       created_by: finalAdminId,
     }
 

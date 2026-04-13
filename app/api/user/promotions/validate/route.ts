@@ -3,13 +3,14 @@ import { type NextRequest, NextResponse } from "next/server"
 interface ValidatePromoRequest {
   data: {
     code: string
+    roomId?: string
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body: ValidatePromoRequest = await request.json()
-    const { code } = body.data || {}
+    const { code, roomId } = body.data || {}
 
     if (!code || !code.trim()) {
       return NextResponse.json(
@@ -22,6 +23,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Call backend API to validate the promotion code
+    const requestData: any = {
+      code: code.toUpperCase().trim(),
+    }
+    
+    // Include roomId if provided (for room-specific promotions)
+    if (roomId) {
+      requestData.roomId = roomId
+    }
+    
     const response = await fetch(`${process.env.API_PATH}/user/promotions/validate`, {
       method: "POST",
       headers: {
@@ -29,9 +39,7 @@ export async function POST(request: NextRequest) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        data: {
-          code: code.toUpperCase().trim(),
-        },
+        data: requestData,
       }),
     })
 

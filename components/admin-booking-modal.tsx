@@ -257,32 +257,6 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
 
     if (!isOpen) return null
 
-    // Show permission denied message for moderators
-    if (isModulator) {
-        return (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                <div className="bg-white rounded-lg max-w-md w-full" onClick={e => e.stopPropagation()}>
-                    <div className="flex items-center justify-between p-6 border-b">
-                        <h2 className="text-xl font-bold">Access Denied</h2>
-                        <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-                            <X className="w-6 h-6" />
-                        </button>
-                    </div>
-                    <div className="p-6">
-                        <p className="text-gray-600 mb-4">
-                            You don't have permission to manage bookings. Only admins can create or cancel bookings.
-                        </p>
-                        <button
-                            onClick={onClose}
-                            className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                        >
-                            Close
-                        </button>
-                    </div>
-                </div>
-            </div>
-        )
-    }
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -405,6 +379,7 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                             {/* Promo Code Section */}
                             <PromoInput
                                 cartTotal={priceBeforeDiscount}
+                                roomId={room.room_id}
                                 externalDiscount={discount}
                                 onPromoApplied={(finalPrice, discountAmount, promoCode, promotionId) => {
                                     if (promoCode === "") {

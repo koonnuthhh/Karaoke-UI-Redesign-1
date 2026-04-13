@@ -4,6 +4,7 @@ interface ApplyPromoRequest {
   data: {
     code: string
     total_price: number
+    roomId?: string
   }
 }
 
@@ -26,7 +27,7 @@ interface DiscountResponse {
 export async function POST(request: NextRequest) {
   try {
     const body: ApplyPromoRequest = await request.json()
-    const { code, total_price } = body.data || {}
+    const { code, total_price, roomId } = body.data || {}
 
     if (!code || !code.trim()) {
       return NextResponse.json(
@@ -48,9 +49,83 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const trimmedCode = code.toUpperCase().trim()
+    
+    // If roomId is provided, validate room-specific promotions
+    if (roomId) {
+      try {
+        // Try to fetch promotion details by code to check room restrictions
+        let promotionData = null
+        let detailsResponse
+        
+        // Try endpoint pattern 1: /promotions/by-code/{code}
+        let url = `${process.env.API_PATH}/promotions/by-code/${trimmedCode}`
+        detailsResponse = await fetch(url, {
+          method: "GET",
+          headers: {
+            "apikey": `${process.env.API_KEY}`,
+            "Content-Type": "application/json",
+          },
+        })
+
+        if (detailsResponse.ok) {
+          const response = await detailsResponse.json()
+          promotionData = response.data || response
+        } else {
+          // Try endpoint pattern 2: /admin/promotions with code filter
+          url = `${process.env.API_PATH}/admin/promotions?code=${trimmedCode}`
+          detailsResponse = await fetch(url, {
+            method: "GET",
+            headers: {
+              "apikey": `${process.env.API_KEY}`,
+              "Content-Type": "application/json",
+            },
+          })
+
+          if (detailsResponse.ok) {
+            const response = await detailsResponse.json()
+            const promos = Array.isArray(response.data) ? response.data : [response.data]
+            promotionData = promos.find((p: any) => p.code === trimmedCode)
+          }
+        }
+        
+        // Validate room restriction if promotion data found
+        if (promotionData) {
+          if (promotionData.is_room_specific && promotionData.applicable_room_ids) {
+            const roomIds = promotionData.applicable_room_ids
+            
+            // Check if provided roomId is in the applicable rooms list
+            if (Array.isArray(roomIds) && roomIds.length > 0 && !roomIds.includes(roomId)) {
+              return NextResponse.json(
+                {
+                  success: false,
+                  error: {
+                    message: "This promotion is not available for the selected room",
+                  },
+                },
+                { status: 400 }
+              )
+            }
+          }
+        }
+      } catch (validationError) {
+        // Log but don't fail - continue to backend for final validation
+        console.error("Room validation check error:", validationError)
+      }
+    }
+    
     // Call backend API to apply the promotion code
     const backendUrl = `${process.env.API_PATH}/user/promotions/apply`
-    const trimmedCode = code.toUpperCase().trim()
+    
+    const requestData: any = {
+      code: trimmedCode,
+      total_price,
+    }
+    
+    // Include roomId if provided (for room-specific promotions)
+    if (roomId) {
+      requestData.roomId = roomId
+    }
     
     const response = await fetch(backendUrl, {
       method: "POST",
@@ -59,10 +134,7 @@ export async function POST(request: NextRequest) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        data: {
-          code: trimmedCode,
-          total_price,
-        },
+        data: requestData,
       }),
     })
 

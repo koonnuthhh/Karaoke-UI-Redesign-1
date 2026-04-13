@@ -48,11 +48,6 @@ function SlotCell({
       return `${baseStyles} ${siteConfig.theme.maintext} cursor-not-allowed`
     }
 
-    // Modulators cannot click any slot
-    if (isModulator) {
-      return `${baseStyles} ${siteConfig.theme.maintext} cursor-not-allowed`
-    }
-
     switch (status) {
       case "booked":
         // For admin, booked slots are clickable to see details
@@ -82,8 +77,8 @@ function SlotCell({
     const status = slot.status
     const isPast = isTimeSlotPast(slot.startTime, scheduleDate)
     
-    // If modulator or time slot has passed and user is not admin, show grayed out
-    if ((isModulator || isPast) && !adminCredential) {
+    // If time slot has passed and user is not admin, show grayed out
+    if (isPast && !adminCredential) {
       return siteConfig.theme.roomclosed
     }
     
@@ -120,11 +115,6 @@ function SlotCell({
         onClick={() => {
           const isPast = isTimeSlotPast(slot.startTime, scheduleDate)
           
-          // Prevent modulators from clicking
-          if (isModulator) {
-            return
-          }
-          
           // Prevent clicking on past slots for non-admin users
           if (isPast && !adminCredential) {
             return
@@ -146,7 +136,7 @@ function SlotCell({
         {/* Check if slot is greyed out (unavailable) */}
         {(() => {
           const isPast = isTimeSlotPast(slot.startTime, scheduleDate)
-          const isUnavailable = (isModulator || isPast || slot.status === "closed" ) && !adminCredential &&  slot.status !== "booked"
+          const isUnavailable = (isPast || slot.status === "closed" ) && !adminCredential &&  slot.status !== "booked"
           
           if (isUnavailable) {
             return <div className="font-medium truncate max-w-[5rem]">Unavailable</div>
@@ -197,12 +187,6 @@ export function ScheduleTable({ scheduleData, isLoading, adminCredential, handle
   const isModulator = currentUser?.role === "modulator"
 
   const handleSlotClick = (slot: TimeSlot) => {
-    // Modulators cannot book or manage bookings
-    if (isModulator) {
-      setAlertMessage("You don't have permission to manage bookings")
-      return
-    }
-
     //console.log("Slot data:",slot)
     // Only check when user is not admin and slot is available
     if (!adminCredential && slot.status === "available") {

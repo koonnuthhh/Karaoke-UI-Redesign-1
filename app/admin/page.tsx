@@ -157,6 +157,7 @@ export default function AdminPanel() {
             promotions={promotions}
             dataLoading={dataLoading}
             adminCredential="current"
+            rooms={rooms}
             onRefresh={fetchAllData}
           />
         )}

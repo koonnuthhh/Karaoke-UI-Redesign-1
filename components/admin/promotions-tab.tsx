@@ -5,19 +5,27 @@ import { Edit, Trash2, Plus, AlertCircle } from "lucide-react"
 import { adminAPI, getAdminUser } from "@/lib/admin-service"
 import type { Promotion } from "@/types"
 
+interface Room {
+  room_id: string
+  room_name: string
+  [key: string]: any
+}
+
 interface PromotionsTabProps {
   promotions: Promotion[]
   dataLoading: boolean
   adminCredential: string | null
   onRefresh: () => void
+  rooms?: Room[]
 }
 
-export function PromotionsTab({ promotions, dataLoading, adminCredential, onRefresh }: PromotionsTabProps) {
+export function PromotionsTab({ promotions, dataLoading, adminCredential, onRefresh, rooms = [] }: PromotionsTabProps) {
   const [modalOpen, setModalOpen] = useState<"create" | "edit" | "delete" | null>(null)
   const [selectedPromotion, setSelectedPromotion] = useState<Promotion | null>(null)
   const [formData, setFormData] = useState<Partial<Promotion>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState("")
+  const [selectedRooms, setSelectedRooms] = useState<string[]>([])
 
   // Helper function to convert form data to backend format
   const convertPromotionData = (formData: Partial<Promotion>) => {
@@ -59,6 +67,7 @@ export function PromotionsTab({ promotions, dataLoading, adminCredential, onRefr
       max_usage: formData.maxUses || formData.max_usage,
       is_active: formData.isActive !== undefined ? formData.isActive : (formData.is_active !== undefined ? formData.is_active : true),
       is_room_specific: formData.is_room_specific || false,
+      applicable_room_ids: formData.applicable_room_ids || [],
     }
 
     // Convert discount field based on type
@@ -72,8 +81,6 @@ export function PromotionsTab({ promotions, dataLoading, adminCredential, onRefr
       backendData.buy_x_hour = discountValue
       backendData.get_y_hour = formData.get_y_hour || 1
     }
-
-    console.log("convertPromotionData result:", backendData)
 
     return backendData
   }
@@ -104,6 +111,13 @@ export function PromotionsTab({ promotions, dataLoading, adminCredential, onRefr
         setIsSubmitting(false)
         return
       }
+      
+      // If room-specific, validate that rooms are selected
+      if (formData.is_room_specific && selectedRooms.length === 0) {
+        setError("Please select at least one room for this promotion")
+        setIsSubmitting(false)
+        return
+      }
 
       const adminUser = getAdminUser()
       if (!adminUser) {
@@ -112,14 +126,21 @@ export function PromotionsTab({ promotions, dataLoading, adminCredential, onRefr
         return
       }
 
+      // Sync selectedRooms to formData
+      const promotionData = {
+        ...formData,
+        applicable_room_ids: selectedRooms,
+      }
+
       // Convert form data to backend format
-      const promotionPayload = convertPromotionData(formData)
+      const promotionPayload = convertPromotionData(promotionData)
 
       const result = await adminAPI.createPromotion(promotionPayload)
       
       if (result.success || result.data) {
         setModalOpen(null)
         setFormData({})
+        setSelectedRooms([])
         onRefresh()
       } else {
         setError(result.message || result.error?.message || "Failed to create promotion")
@@ -158,6 +179,13 @@ export function PromotionsTab({ promotions, dataLoading, adminCredential, onRefr
         setIsSubmitting(false)
         return
       }
+      
+      // If room-specific, validate that rooms are selected
+      if (formData.is_room_specific && selectedRooms.length === 0) {
+        setError("Please select at least one room for this promotion")
+        setIsSubmitting(false)
+        return
+      }
 
       const adminUser = getAdminUser()
       if (!adminUser) {
@@ -183,14 +211,29 @@ export function PromotionsTab({ promotions, dataLoading, adminCredential, onRefr
         return
       }
 
+      // Sync selectedRooms to formData
+      const promotionData = {
+        ...formData,
+        applicable_room_ids: selectedRooms,
+      }
+
       // Convert form data to backend format
-      const promotionPayload = convertPromotionData(formData)
+      const promotionPayload = convertPromotionData(promotionData)
+      
+      console.log("=== AFTER convertPromotionData (UPDATE) ===")
+      console.log("promotionPayload:", promotionPayload)
+      console.log("promotionPayload.applicable_room_ids:", promotionPayload.applicable_room_ids)
+      console.log("promotionPayload keys:", Object.keys(promotionPayload))
       
       // Ensure ID is included in the payload for backend validation
       const promotionPayloadWithId = {
         ...promotionPayload,
         id: promotionId,
       }
+      
+      console.log("=== FINAL PAYLOAD WITH ID (UPDATE) ===")
+      console.log("promotionPayloadWithId:", promotionPayloadWithId)
+      console.log("promotionPayloadWithId.applicable_room_ids:", promotionPayloadWithId.applicable_room_ids)
       
       console.log("handleUpdatePromotion - promotionPayload keys:", Object.keys(promotionPayload))
       console.log("handleUpdatePromotion - promotionPayloadWithId keys:", Object.keys(promotionPayloadWithId))
@@ -213,6 +256,7 @@ export function PromotionsTab({ promotions, dataLoading, adminCredential, onRefr
         setModalOpen(null)
         setFormData({})
         setSelectedPromotion(null)
+        setSelectedRooms([])
         onRefresh()
       } else {
         setError(result.message || result.error?.message || "Failed to update promotion")
@@ -282,9 +326,12 @@ export function PromotionsTab({ promotions, dataLoading, adminCredential, onRefr
           {getAdminUser()?.role === "admin" && (
             <button
               onClick={() => {
+                console.log("=== CREATE PROMOTION BUTTON CLICKED ===")
                 setModalOpen("create")
                 setSelectedPromotion(null)
                 setFormData({})
+                setSelectedRooms([])
+                console.log("selectedRooms reset to:", [])
                 setError("")
               }}
               className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-purple-600 text-white text-sm sm:text-base rounded-md hover:bg-purple-700 transition w-full sm:w-auto justify-center sm:justify-start"
@@ -320,7 +367,14 @@ export function PromotionsTab({ promotions, dataLoading, adminCredential, onRefr
 
                   return (
                     <tr key={promo.id}>
-                      <td className="px-3 sm:px-6 py-2 sm:py-4 text-xs sm:text-sm text-gray-900">{promo.name || promo.pro_name}</td>
+                      <td className="px-3 sm:px-6 py-2 sm:py-4 text-xs sm:text-sm text-gray-900">
+                        <div>
+                          {promo.name || promo.pro_name}
+                          {promo.is_room_specific && (
+                            <div className="text-xs text-blue-600 mt-1">Room-Specific</div>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-3 sm:px-6 py-2 sm:py-4 text-xs sm:text-sm text-gray-600">{promo.code}</td>
                       <td className="px-3 sm:px-6 py-2 sm:py-4 text-xs sm:text-sm text-gray-600">{discountDisplay}</td>
                       <td className="px-3 sm:px-6 py-2 sm:py-4 text-xs sm:text-sm">
@@ -364,6 +418,8 @@ export function PromotionsTab({ promotions, dataLoading, adminCredential, onRefr
                               end_time: promo.end_time?.substring(0, 5),
                               maxUses: promo.maxUses || promo.max_usage,
                               isActive: promo.isActive ?? promo.is_active ?? true,
+                              is_room_specific: promo.is_room_specific || false,
+                              applicable_room_ids: promo.applicable_room_ids || [],
                             }
                             
                             console.log("EditData.id will be:", editData.id)
@@ -371,6 +427,10 @@ export function PromotionsTab({ promotions, dataLoading, adminCredential, onRefr
                             
                             setSelectedPromotion(promo)
                             setFormData(editData)
+                            console.log("=== EDIT MODE: Setting selectedRooms ===")
+                            console.log("promo.applicable_room_ids:", promo.applicable_room_ids)
+                            setSelectedRooms(promo.applicable_room_ids || [])
+                            console.log("selectedRooms set to:", promo.applicable_room_ids || [])
                             setModalOpen("edit")
                             setError("")
                           }}
@@ -530,6 +590,66 @@ export function PromotionsTab({ promotions, dataLoading, adminCredential, onRefr
                   placeholder="e.g., 500 (leave empty for unlimited)"
                   className="w-full px-2 sm:px-3 py-1 sm:py-2 text-xs sm:text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
+              </div>
+              <div className="border-t pt-3 sm:pt-4 mt-3 sm:mt-4">
+                <label className="flex items-center gap-2 mb-3">
+                  <input
+                    type="checkbox"
+                    checked={formData.is_room_specific || false}
+                    onChange={(e) => {
+                      setFormData({ ...formData, is_room_specific: e.target.checked })
+                      if (!e.target.checked) {
+                        setSelectedRooms([])
+                      }
+                    }}
+                    disabled={!isCreateMode && !isAuthorized}
+                    className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+                  <span className="text-xs sm:text-sm font-medium text-gray-700">Make this promotion room-specific?</span>
+                </label>
+                <p className="text-xs text-gray-500 mb-3">Only allow this promotion for specific rooms</p>
+                
+                {formData.is_room_specific && rooms.length > 0 && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-md p-2 sm:p-3">
+                    <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">Select Rooms</label>
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {rooms.map((room) => (
+                        <label key={room.room_id} className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={selectedRooms.includes(room.room_id)}
+                            onChange={(e) => {
+                              console.log(`Room checkbox changed for ${room.room_id}:`, e.target.checked)
+                              if (e.target.checked) {
+                                const newRooms = [...selectedRooms, room.room_id]
+                                console.log("Adding room, new selectedRooms:", newRooms)
+                                setSelectedRooms(newRooms)
+                              } else {
+                                const newRooms = selectedRooms.filter(id => id !== room.room_id)
+                                console.log("Removing room, new selectedRooms:", newRooms)
+                                setSelectedRooms(newRooms)
+                              }
+                            }}
+                            disabled={!isCreateMode && !isAuthorized}
+                            className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                          />
+                          <span className="text-xs sm:text-sm text-gray-700">{room.room_name}</span>
+                        </label>
+                      ))}
+                    </div>
+                    {selectedRooms.length > 0 && (
+                      <div className="mt-2 p-2 bg-white rounded text-xs text-gray-600">
+                        {selectedRooms.length} room(s) selected
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {formData.is_room_specific && rooms.length === 0 && (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-md p-2 sm:p-3 text-xs text-yellow-800">
+                    No rooms available. Please create rooms first.
+                  </div>
+                )}
               </div>
               <div className="mb-2 sm:mb-4">
                 <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Status</label>

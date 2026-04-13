@@ -108,6 +108,7 @@ export interface Promotion {
   is_active?: boolean
   isActive?: boolean  // Legacy support
   is_room_specific?: boolean
+  applicable_room_ids?: string[]  // Array of room IDs for room-specific promotions
   max_usage?: number
   maxUses?: number  // Legacy support
   used_count?: number

@@ -84,22 +84,12 @@ async function makeAdminRequest(
   data?: any
 ) {
   const adminUser = getAdminUser()
-  
-  console.log("makeAdminRequest called", {
-    endpoint,
-    method,
-    adminUser,
-    hasAdminId: !!adminUser?.admin_id
-  })
 
   if (!adminUser) {
-    console.error("No admin user found in localStorage")
     throw new Error("No admin logged in. Please login first.")
   }
 
   if (!adminUser.admin_id) {
-    console.error("Admin user exists but has no admin_id", adminUser)
-    console.error("Storage contents:", localStorage.getItem("adminUser"))
     throw new Error("Admin ID not found in session. Please login again.")
   }
 
@@ -118,7 +108,6 @@ async function makeAdminRequest(
       const query = new URLSearchParams(data || {})
       const queryString = query.toString()
       const url = queryString ? `${endpoint}?${queryString}` : endpoint
-      console.log(`[GET] ${url} with headers:`, config.headers)
       const response = await fetch(url, config)
       return await response.json()
     } else {
@@ -133,13 +122,16 @@ async function makeAdminRequest(
         },
       }
       config.body = JSON.stringify(requestBody)
-      console.log(`[${method.toUpperCase()}] ${endpoint}`)
-      console.log("Headers being sent:", config.headers)
       console.log("Request body:", requestBody)
       console.log("Full request body JSON:", JSON.stringify(requestBody, null, 2))
       console.log("Data object keys:", Object.keys(requestBody.data))
+      console.log("Data.applicable_room_ids value:", requestBody.data.applicable_room_ids)
       console.log("Data.id value:", requestBody.data.id)
+      console.log("=== ABOUT TO SEND FETCH ===")
+      console.log("config.body being sent:", config.body)
+      console.log("config.body parsed:", JSON.parse(config.body))
       const response = await fetch(endpoint, config)
+      console.log("=== FETCH RESPONSE RECEIVED ===")
       const responseData = await response.json()
       console.log(`Response status: ${response.status}`, responseData)
       if (!response.ok) {

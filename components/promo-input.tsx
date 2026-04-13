@@ -6,6 +6,7 @@ import { siteConfig } from "@/config/site-config"
 
 interface PromoInputProps {
   cartTotal: number
+  roomId?: string
   onPromoApplied?: (finalPrice: number, discountAmount: number, promoCode: string, promotionId?: string) => void
   externalDiscount?: { original_price: number; discount_amount: number; final_price: number; promotion_id?: string } | null
 }
@@ -18,7 +19,7 @@ interface DiscountResult {
   message?: string
 }
 
-export function PromoInput({ cartTotal, onPromoApplied, externalDiscount }: PromoInputProps) {
+export function PromoInput({ cartTotal, roomId, onPromoApplied, externalDiscount }: PromoInputProps) {
   const [code, setCode] = useState("")
   const [discount, setDiscount] = useState<DiscountResult | null>(null)
   const [error, setError] = useState("")
@@ -46,7 +47,12 @@ export function PromoInput({ cartTotal, onPromoApplied, externalDiscount }: Prom
       const response = await fetch("/api/user/promotions/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ data: { code: trimmedCode } }),
+        body: JSON.stringify({ 
+          data: { 
+            code: trimmedCode,
+            ...(roomId && { roomId })
+          } 
+        }),
       })
 
       const result = await response.json()
@@ -79,15 +85,22 @@ export function PromoInput({ cartTotal, onPromoApplied, externalDiscount }: Prom
     setError("")
 
     try {
+      const requestBody: any = {
+        data: {
+          code: trimmedCode,
+          total_price: cartTotal,
+        },
+      }
+      
+      // Include roomId if provided (for room-specific promotions)
+      if (roomId) {
+        requestBody.data.roomId = roomId
+      }
+      
       const response = await fetch("/api/user/promotions/apply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          data: {
-            code: trimmedCode,
-            total_price: cartTotal,
-          },
-        }),
+        body: JSON.stringify(requestBody),
       })
 
       const result = await response.json()

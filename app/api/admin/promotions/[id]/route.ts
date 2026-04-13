@@ -64,20 +64,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const adminId = req.headers.get("X-Admin-ID")
     const adminUsername = req.headers.get("X-Admin-Username")
 
-    // Debug: log all headers to see what we're receiving
-    const allHeaders: Record<string, string> = {}
-    req.headers.forEach((value, key) => {
-      allHeaders[key] = value
-    })
-    console.log("ALL HEADERS RECEIVED:", JSON.stringify(allHeaders, null, 2))
-    console.log("Admin headers received:", { adminId, adminUsername })
-    console.log("X-Admin-ID header (exact):", req.headers.get("X-Admin-ID"))
-    console.log("x-admin-id header (lowercase):", req.headers.get("x-admin-id"))
-
     // Validate admin - use fallback from body if header is missing
     const finalAdminId = adminId || body.admin_id || body.data?.admin_id
     if (!finalAdminId) {
-      console.error("Missing Admin ID in headers and body")
       return NextResponse.json(
         { success: false, error: { message: "Admin ID is required. Please login again." } },
         { status: 401 }
@@ -106,6 +95,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       max_usage: promotionData.max_usage || promotionData.maxUses,
       is_active: promotionData.is_active !== undefined ? promotionData.is_active : promotionData.isActive,
       is_room_specific: promotionData.is_room_specific || false,
+      applicable_room_ids: promotionData.applicable_room_ids || [],
     }
 
     // Remove undefined fields

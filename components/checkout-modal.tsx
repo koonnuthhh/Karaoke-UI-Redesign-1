@@ -303,7 +303,8 @@ export function CheckoutModal({ isOpen, onClose, bookingData }: CheckoutModalPro
 
       {/* Promo Input Component */}
       <PromoInput 
-        cartTotal={bookingData.totalPrice} 
+        cartTotal={bookingData.totalPrice}
+        roomId={bookingData.roomId}
         onPromoApplied={(newFinalPrice, discount, promoCode, promotionId) => {
           setFinalPrice(newFinalPrice)
           setDiscountAmount(discount)
