@@ -246,7 +246,7 @@ export function ScheduleTable({ scheduleData, isLoading, adminCredential, handle
                 <th className="px-2 sm:px-3 py-1.5 sm:py-3 text-left text-xs font-medium uppercase tracking-wider" style={{ color: siteConfig.theme.maintext }}>
                   Start time
                 </th>
-                {scheduleData.rooms.filter((room) => room.is_active).map((room) => (
+                {scheduleData.rooms.filter((room) => room.is_active).sort((a, b) => a.room_name.localeCompare(b.room_name)).map((room) => (
                   <th
                     key={room.room_id}
                     className="px-1.5 sm:px-4 py-1.5 sm:py-3 text-center text-xs font-medium uppercase tracking-wider"
@@ -269,7 +269,7 @@ export function ScheduleTable({ scheduleData, isLoading, adminCredential, handle
                   <td className="px-2 sm:px-4 py-1.5 sm:py-3 whitespace-nowrap text-xs sm:text-sm font-medium" style={{ color: siteConfig.theme.maintext }}>
                     {timeSlot}
                   </td>
-                  {scheduleData.rooms.filter((room) => room.is_active).map((room) => {
+                  {scheduleData.rooms.filter((room) => room.is_active).sort((a, b) => a.room_name.localeCompare(b.room_name)).map((room) => {
                     const slot = scheduleData.bookings.find((booking) => {
                       return (
                         booking.roomId === room.room_id &&
