@@ -95,6 +95,7 @@ export function getConsecutiveSlots(selectedSlots: string[], allSlots: string[])
 
 export function isTimeSlotPast(timeSlot: string, scheduleDate: string): boolean {
   const now = new Date()
+  const pastThresholdMinutes = 30
   
   // Parse the schedule date and ensure we're working in local time
   const [year, month, day] = scheduleDate.split('-').map(Number)
@@ -116,6 +117,8 @@ export function isTimeSlotPast(timeSlot: string, scheduleDate: string): boolean 
   if (hours >= 0 && hours < 6) {
     slotDate.setDate(slotDate.getDate() + 1)
   }
+
+  slotDate.setMinutes(slotDate.getMinutes() + pastThresholdMinutes)
   
   // Compare with current time
   return slotDate < now
