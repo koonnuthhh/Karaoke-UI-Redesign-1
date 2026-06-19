@@ -226,9 +226,15 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData}: B
           className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex items-center justify-between p-6 border-b">
-            <h2 className="text-xl font-bold text-gray-900">{siteConfig.content.booking.modalTitle}</h2>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+          <div className="flex items-center justify-between p-6 border-b" style={{ borderColor: '#e5e7eb' }}>
+            <h2 className="text-xl font-bold" style={{ color: siteConfig.theme.maintext }}>{"Book Your Karaoke Session"}</h2>
+            <button 
+              onClick={onClose} 
+              className="transition-colors"
+              style={{ color: '#9ca3af' }}
+              onMouseEnter={(e) => e.currentTarget.style.color = '#6b7280'}
+              onMouseLeave={(e) => e.currentTarget.style.color = '#9ca3af'}
+            >
               <X className="w-6 h-6" />
             </button>
           </div>
@@ -236,10 +242,10 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData}: B
           <div className="p-6">
             {/* Time Selection */}
             <div className="mb-6">
-              <h3 className="font-semibold text-gray-900 mb-3">Select Time : Room {room.room_name}</h3>
+              <h3 className="font-semibold mb-3" style={{ color: siteConfig.theme.maintext }}>Select Time : Room {room.room_name}</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="startTime" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="startTime" className="block text-sm font-medium mb-1" style={{ color: siteConfig.theme.maintext }}>
                     Start Time
                   </label>
                   <select
@@ -249,7 +255,19 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData}: B
                       setStartTime(e.target.value)
                       setEndTime("") // Reset end time when start time changes
                     }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    className="w-full px-3 py-2 border rounded-md focus:outline-none"
+                    style={{
+                      borderColor: '#d1d5db',
+                      color: siteConfig.theme.maintext
+                    }}
+                    onFocus={(e) => {
+                      e.target.style.borderColor = 'transparent'
+                      e.target.style.boxShadow = `0 0 0 2px ${siteConfig.theme.maintext}`
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = '#d1d5db'
+                      e.target.style.boxShadow = 'none'
+                    }}
                   >
                     {availableSlots.map((slot) => (
                       <option key={slot} value={slot}>
@@ -259,7 +277,7 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData}: B
                   </select>
                 </div>
                 <div>
-                  <label htmlFor="endTime" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="endTime" className="block text-sm font-medium mb-1" style={{ color: siteConfig.theme.maintext }}>
                     End Time
                   </label>
                   <select
@@ -267,7 +285,22 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData}: B
                     value={endTime}
                     onChange={(e) => setEndTime(e.target.value)}
                     disabled={!startTime}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    className="w-full px-3 py-2 border rounded-md focus:outline-none disabled:cursor-not-allowed"
+                    style={{
+                      borderColor: '#d1d5db',
+                      backgroundColor: !startTime ? '#f3f4f6' : 'white',
+                      color: siteConfig.theme.maintext
+                    }}
+                    onFocus={(e) => {
+                      if (startTime) {
+                        e.target.style.borderColor = 'transparent'
+                        e.target.style.boxShadow = `0 0 0 2px ${siteConfig.theme.maintext}`
+                      }
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = '#d1d5db'
+                      e.target.style.boxShadow = 'none'
+                    }}
                   >
                     {availableEndTimes.map((slot) => (
                       <option key={slot} value={slot}>
@@ -280,9 +313,9 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData}: B
             </div>
 
             {/* Booking Summary */}
-            <div className="bg-purple-50 rounded-lg p-4 mb-6">
-              <h3 className="font-semibold text-purple-900 mb-2">Booking Summary</h3>
-              <div className="space-y-1 text-sm text-purple-800">
+            <div className="rounded-lg p-4 mb-6" style={{ backgroundColor: '#f3f4f6' }}>
+              <h3 className="font-semibold mb-2" style={{ color: siteConfig.theme.primary }}>Booking Summary</h3>
+              <div className="space-y-1 text-sm" style={{ color: siteConfig.theme.secondary }}>
                 <p>
                   <span className="font-medium">Room:</span> {room.room_name}
                 </p>
@@ -319,7 +352,7 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData}: B
             {/* Booking Form */}
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label htmlFor="customerName" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="customerName" className="block text-sm font-medium mb-1" style={{ color: siteConfig.theme.maintext }}>
                   Name *
                 </label>
                 <input
@@ -329,7 +362,11 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData}: B
                   required
                   value={formData.customerName}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border rounded-md focus:outline-none"
+                  style={{
+                    borderColor: '#d1d5db',
+                    color: siteConfig.theme.maintext
+                  }}
                 />
               </div>
 
@@ -349,7 +386,7 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData}: B
               </div> */}
 
               <div>
-                <label htmlFor="customerPhone" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="customerPhone" className="block text-sm font-medium mb-1" style={{ color: siteConfig.theme.maintext }}>
                   Phone Number *
                 </label>
                 <input
@@ -359,7 +396,11 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData}: B
                   required
                   value={formData.customerPhone}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border rounded-md focus:outline-none"
+                  style={{
+                    borderColor: '#d1d5db',
+                    color: siteConfig.theme.maintext
+                  }}
                 />
               </div>
 
@@ -379,8 +420,8 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData}: B
               </div> */}
 
               {error && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-md">
-                  <p className="text-sm text-red-600">{error}</p>
+                <div className="p-3 border rounded-md" style={{ backgroundColor: '#fef2f2', borderColor: '#fecaca' }}>
+                  <p className="text-sm" style={{ color: siteConfig.theme.error }}>{error}</p>
                 </div>
               )}
 
@@ -388,14 +429,23 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData}: B
                 <button
                   type="button"
                   onClick={onClose}
-                  className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+                  className="flex-1 px-4 py-2 rounded-md transition-colors"
+                  style={{ 
+                    color: siteConfig.theme.maintext, 
+                    backgroundColor: '#f3f4f6'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e5e7eb'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
                 >
-                  {siteConfig.content.booking.cancelButton}
+                  {"Cancel"}
                 </button>
                 <button
                   type="submit"
                   disabled={!startTime || !endTime}
-                  className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                  className="flex-1 px-4 py-2 text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                  style={{ backgroundColor: siteConfig.theme.primary }}
+                  onMouseEnter={(e) => !(!startTime || !endTime) && (e.currentTarget.style.backgroundColor = siteConfig.theme.secondary)}
+                  onMouseLeave={(e) => !(!startTime || !endTime) && (e.currentTarget.style.backgroundColor = siteConfig.theme.primary)}
                 >
                   Proceed to Checkout - ฿{totalPrice.toFixed(2)}
                 </button>

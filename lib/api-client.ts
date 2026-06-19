@@ -15,6 +15,7 @@ class ApiClient {
 
     const config: RequestInit = {
       headers: {
+        apikey: `${typeof window === 'undefined' ? process.env.API_KEY : ''}`,
         "Content-Type": "application/json",
         ...options.headers,
       },
@@ -47,7 +48,7 @@ class ApiClient {
   }
 
   async getSchedule(date: string): Promise<ScheduleData> {
-    return this.request<ScheduleData>(`${siteConfig.api.endpoints.schedule}?date=${date}`)
+    return this.request<ScheduleData>(`/api/schedule?date=${date}`)
   }
 }
 

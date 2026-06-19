@@ -7,16 +7,20 @@ import { apiClient } from "../lib/api-client"
 import { ScheduleTable } from "../components/schedule-table"
 import { DateSelector } from "../components/date-selector"
 import { useRouter } from "next/navigation"
+import { useAdminAuth } from "../hooks/use-admin-auth"
 
 export default function HomePage(
-  { adminCredential = null }: { adminCredential: string | null }
+  { adminCredential: passedCredential = null }: { adminCredential?: string | null }
 ) {
   const router = useRouter()
+  const { adminCredential: storedCredential, isLoading: authLoading, logout } = useAdminAuth()
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [scheduleData, setScheduleData] = useState<ScheduleData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState("")
-  // New state to manage admin status
+
+  // Use either passed credential or stored credential
+  const adminCredential = passedCredential || storedCredential
 
   useEffect(() => {
     const today = new Date().toISOString().split("T")[0]
@@ -56,9 +60,7 @@ export default function HomePage(
 
   // Handle logout function
   const handleLogout = () => {
-    // Implement actual logout logic here (e.g., clear token, redirect)
-    console.log("Admin user logged out.")
-    // For this example, we'll just redirect to the homepage.
+    logout()
     router.push("/")
   }
 
@@ -67,24 +69,39 @@ export default function HomePage(
       {/* Header */}
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex justify-between items-center text-center">
+          <div className="flex justify-between items-center text-center mb-4">
             <div className="flex-grow">
               <h1 className="text-3xl font-bold text-gray-900 mb-2">{siteConfig.business.name}</h1>
               <p className="text-lg text-gray-600">{siteConfig.business.tagline}</p>
+              {adminCredential && <p className="text-sm text-purple-600 font-medium">Admin Table</p>}
             </div>
-            {adminCredential && (
+          </div>
+          
+          {/* Admin Navigation Buttons */}
+          {adminCredential && (
+            <div className="flex justify-end gap-3 flex-wrap">
+              <button
+                onClick={() => router.push("/admin")}
+                className="px-4 py-2 font-semibold text-white rounded-md shadow transition-colors hover:opacity-90"
+                style={{
+                  backgroundColor: "#8b5cf6",
+                  border: "none",
+                }}
+              >
+                Admin Panel
+              </button>
               <button
                 onClick={handleLogout}
-                className="px-4 py-2 font-semibold text-white rounded-md shadow transition-colors"
+                className="px-4 py-2 font-semibold text-white rounded-md shadow transition-colors hover:opacity-90"
                 style={{
-                  backgroundColor: "#dc2626", // A nice red for logout
+                  backgroundColor: "#dc2626",
                   border: "none",
                 }}
               >
                 Logout
               </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </header>
 
@@ -97,7 +114,7 @@ export default function HomePage(
             onClick={handleRefresh}
             className="flex items-center gap-2 px-4 py-2 font-semibold rounded-md shadow transition-colors"
             style={{
-              backgroundColor: siteConfig.theme.secondary,
+              backgroundColor: siteConfig.theme.primary,
               color: "#fff",
               border: "none",
             }}

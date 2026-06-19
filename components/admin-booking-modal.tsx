@@ -6,8 +6,9 @@ import { siteConfig } from "../config/site-config"
 import type { TimeSlot, Room, ScheduleData, BookingRequest } from "../types"
 import { calculatePrice, formatDuration, isTimeSlotAvailable } from "../lib/time-utils"
 import { LoadingSpinner } from "../components/ui/loading-spinner"
-import { time } from "console"
 import { AlertModal } from "./AlertModal"
+import { PromoInput } from "./promo-input"
+import { getAdminUser } from "../lib/admin-service"
 
 interface AdminBookingModalProps {
     isOpen: boolean
@@ -17,15 +18,13 @@ interface AdminBookingModalProps {
     scheduleData: ScheduleData
     adminCredential: string | null
 }
-interface User {
-    username: string
-    email: string
-    phone: string
-}
-
 export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleData, adminCredential }: AdminBookingModalProps) {
     const [startTime, setStartTime] = useState(timeSlot.startTime)
     const [endTime, setEndTime] = useState("")
+    const [customPrice, setCustomPrice] = useState<number | null>(null)
+    const [discount, setDiscount] = useState<{ original_price: number; discount_amount: number; final_price: number } | null>(null)
+    const [appliedPromoCode, setAppliedPromoCode] = useState<string | null>(null)
+    const [appliedPromotionId, setAppliedPromotionId] = useState<string | null>(null)
     const [formData, setFormData] = useState({
         customerName: "",
         customerEmail: "",
@@ -34,8 +33,13 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
     })
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [error, setError] = useState("")
-    const [User, setUser] = useState<User | null>(null);
     const [showConfirmCancel, setShowConfirmCancel] = useState(false)
+    const currentUser = getAdminUser()
+    const isModulator = currentUser?.role === "modulator"
+    
+    const bookedSlot = timeSlot.status === "booked"
+        ? scheduleData.bookings.find(b => b.id === timeSlot.id)
+        : null
 
 
     // same available slots logic as BookingModal
@@ -80,37 +84,6 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
     })
 
     // default end time logic same as BookingModal
-    useEffect(() => {
-        if (timeSlot.status === "booked" && timeSlot.customerID) {
-            (async () => {
-                try {
-                    const userraw = await fetch("/api/user", {
-                        method: "GET",
-                        headers: {
-                            "Content-Type": "application/json",
-                            "userId": timeSlot.customerID,
-                            "credential": adminCredential ? adminCredential : ""
-                        }
-                    });
-
-                    const userdata = await userraw.json();
-                    setUser({
-                        username: userdata.data.username,
-                        email: userdata.data.email,
-                        phone: userdata.data.phone,
-                    });
-                    //console.log("userdata: ", userdata)
-                } catch (err) {
-                    console.error("Failed to fetch user:", err);
-                }
-            })();
-        } else {
-            setUser(null); // reset when timeslot changes
-        }
-    }, [timeSlot.status, timeSlot.customerID]);
-
-    //console.log("User: ", User)
-
     // Set default end time separately
     useEffect(() => {
         if (isOpen && startTime) {
@@ -133,6 +106,16 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
         }
     }, [isOpen, startTime, scheduleData.timeSlots]);
 
+    // Reset custom price and discount when modal opens
+    useEffect(() => {
+        if (isOpen) {
+            setCustomPrice(null)
+            setDiscount(null)
+            setAppliedPromoCode(null)
+            setAppliedPromotionId(null)
+        }
+    }, [isOpen]);
+
     const totalDuration = startTime && endTime
         ? (() => {
             let endTimeDate = endTime < "06:00" ? new Date(`2000-01-02T${endTime}`) : new Date(`2000-01-01T${endTime}`)
@@ -141,7 +124,41 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
         })()
         : 0
 
-    const totalPrice = calculatePrice(room.price_per_half_hour, totalDuration)
+    const calculatedPrice = calculatePrice(room.price_per_half_hour, totalDuration)
+
+    // Automatically recalculate discount when custom price changes
+    useEffect(() => {
+        if (appliedPromoCode) {
+            const priceToUse = customPrice !== null && customPrice >= 0 ? customPrice : calculatedPrice
+            const reapplyPromo = async () => {
+                try {
+                    const response = await fetch("/api/user/promotions/apply", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            data: {
+                                code: appliedPromoCode,
+                                total_price: priceToUse,
+                            },
+                        }),
+                    })
+                    const result = await response.json()
+                    if (result.success && result.data) {
+                        setDiscount({
+                            original_price: priceToUse,
+                            discount_amount: result.data.discount_amount,
+                            final_price: result.data.final_price
+                        })
+                    }
+                } catch (err) {
+                    // Silently fail - keep existing discount
+                }
+            }
+            reapplyPromo()
+        }
+    }, [customPrice, appliedPromoCode, calculatedPrice]);
+    const priceBeforeDiscount = customPrice !== null && customPrice >= 0 ? customPrice : calculatedPrice
+    const finalPrice = discount ? discount.final_price : priceBeforeDiscount
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         setFormData(prev => ({
@@ -164,7 +181,7 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                 roomName: timeSlot.roomName,
                 date: timeSlot.date,
                 timeSlots: [startTime, endTime],
-                totalPrice,
+                totalPrice: finalPrice,
                 duration: totalDuration,
                 ...formData,
             }
@@ -185,7 +202,8 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                 headers: { "Content-Type": "application/json", "credential": adminCredential ? adminCredential : "" },
                 body: JSON.stringify({
                     booking_id: createResult.data.booking_id,
-                    booking_status: "booked"
+                    booking_status: "booked",
+                    ...(appliedPromotionId && { promotion_id: appliedPromotionId }),
                 })
             })
             const updateResult = await updateRes.json()
@@ -239,6 +257,7 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
 
     if (!isOpen) return null
 
+
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
@@ -253,26 +272,22 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
 
                 <div className="p-6">
                     {timeSlot.status === "booked" ? (
-                        User == null ? (
-                            <p>Loading customer data...</p> // or <LoadingSpinner size="md" />
-                        ) : (
-                            <>
-                                <p><strong>Customer:</strong> {User.username}</p>
-                                <p><strong>Phone:</strong> {User.phone}</p>
-                                <p><strong>Time:</strong> {timeSlot.bookingStart} - {timeSlot.bookingEnd}</p>
-                                <div className="mt-4 flex gap-3">
-                                    <button
-                                        onClick={handleCancelBooking}
-                                        className="flex-1 px-4 py-2 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
-                                        disabled={isSubmitting}
-                                        style={{backgroundColor: siteConfig.theme.error}}
-                                    >
-                                        {isSubmitting ? <LoadingSpinner size="sm" /> : "Cancel Booking"}
-                                    </button>
-                                </div>
-                                {error && <p className="text-red-600 mt-3">{error}</p>}
-                            </>
-                        )
+                        <>
+                            <p><strong>Customer:</strong> {bookedSlot?.customerName ?? timeSlot.customerName ?? "Unknown"}</p>
+                            <p><strong>Phone:</strong> {bookedSlot?.customerPhone ?? timeSlot.customerPhone ?? "Not provided"}</p>
+                            <p><strong>Time:</strong> {timeSlot.bookingStart} - {timeSlot.bookingEnd}</p>
+                            <div className="mt-4 flex gap-3">
+                                <button
+                                    onClick={handleCancelBooking}
+                                    className="flex-1 px-4 py-2 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
+                                    disabled={isSubmitting}
+                                    style={{backgroundColor: siteConfig.theme.error}}
+                                >
+                                    {isSubmitting ? <LoadingSpinner size="sm" /> : "Cancel Booking"}
+                                </button>
+                            </div>
+                            {error && <p className="text-red-600 mt-3">{error}</p>}
+                        </>
                     ) : (
                         <>
                             {/* Same UI as BookingModal */}
@@ -314,7 +329,16 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                                 <p><span className="font-medium">Date:</span> {new Date(timeSlot.date).toLocaleDateString()}</p>
                                 <p><span className="font-medium">Time:</span> {startTime && endTime ? `${startTime} - ${endTime}` : "Not selected"}</p>
                                 <p><span className="font-medium">Duration:</span> {formatDuration(totalDuration)}</p>
-                                <p><span className="font-medium">Total Price:</span> ฿{totalPrice.toFixed(2)}</p>
+                                <p><span className="font-medium">Original Price:</span> ฿{calculatedPrice.toFixed(2)}</p>
+                                {customPrice !== null && (
+                                    <p className="text-blue-600"><span className="font-medium">Custom Price:</span> ฿{customPrice.toFixed(2)}</p>
+                                )}
+                                {discount && (
+                                    <div className="mt-2 pt-2 border-t border-purple-200">
+                                        <p className="text-green-600"><span className="font-medium">Discount:</span> -฿{discount.discount_amount.toFixed(2)}</p>
+                                        <p className="font-bold text-lg text-green-600"><span className="font-medium">After Discount:</span> ฿{discount.final_price.toFixed(2)}</p>
+                                    </div>
+                                )}
                                 {/* <p><span className="font-medium">Capacity:</span> {room.capacity}</p> */}
                             </div>
 
@@ -332,7 +356,48 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Phone *</label>
                                     <input name="customerPhone" value={formData.customerPhone} onChange={handleInputChange} required className="w-full px-3 py-2 border border-gray-300 rounded-md" />
                                 </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Price (Leave blank to use original: ฿{calculatedPrice.toFixed(2)})
+                                        {appliedPromoCode && <span className="text-green-600 text-xs ml-2">(Promo will auto-update)</span>}
+                                    </label>
+                                    <input
+                                        type="number"
+                                        value={customPrice !== null ? customPrice : ""}
+                                        onChange={(e) => {
+                                            const value = e.target.value;
+                                            setCustomPrice(value === "" ? null : parseFloat(value));
+                                        }}
+                                        min="0"
+                                        step="0.01"
+                                        placeholder={calculatedPrice.toFixed(2)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                                    />
+                                </div>
                             </div>
+
+                            {/* Promo Code Section */}
+                            <PromoInput
+                                cartTotal={priceBeforeDiscount}
+                                roomId={room.room_id}
+                                externalDiscount={discount}
+                                onPromoApplied={(finalPrice, discountAmount, promoCode, promotionId) => {
+                                    if (promoCode === "") {
+                                        // Promo was cleared
+                                        setDiscount(null)
+                                        setAppliedPromoCode(null)
+                                        setAppliedPromotionId(null)
+                                    } else {
+                                        setDiscount({
+                                            original_price: priceBeforeDiscount,
+                                            discount_amount: discountAmount,
+                                            final_price: finalPrice
+                                        })
+                                        setAppliedPromoCode(promoCode)
+                                        setAppliedPromotionId(promotionId || null)
+                                    }
+                                }}
+                            />
 
                             {error && <p className="text-red-600 mt-3">{error}</p>}
 

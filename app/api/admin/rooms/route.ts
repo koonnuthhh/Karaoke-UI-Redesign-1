@@ -1,29 +1,50 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { siteConfig } from "@/config/site-config"
 
-export async function GET(req: Request) {
-  const username = req.headers.get("username")
-  const password = req.headers.get("password")
+export async function GET(req: NextRequest) {
+  try {
+    const res = await fetch(`${siteConfig.api.baseURL}/admin/rooms`, {
+      method: "GET",
+      headers: {
+        apikey: `${process.env.API_KEY}`,
+        "Content-Type": "application/json"
+      }
+    })
 
-  if (username === "admin" && password === "karaoke2024") {
-    return NextResponse.json({ success: true, credential : process.env.ADMIN_CREDENTIAL })
+    const text = await res.text()
+    let data
+    try {
+      data = JSON.parse(text)
+    } catch {
+      return NextResponse.json(
+        { success: false, message: text || "Invalid response from server" },
+        { status: res.status }
+      )
+    }
+
+    if (!res.ok) {
+      return NextResponse.json(data, { status: res.status })
+    }
+
+    return NextResponse.json(data)
+  } catch (error) {
+    console.error("Error fetching rooms:", error)
+    return NextResponse.json(
+      { success: false, message: "Failed to fetch rooms" },
+      { status: 500 }
+    )
   }
-
-  return NextResponse.json(
-    { success: false, message: "Invalid credentials" },
-    { status: 401 }
-  )
 }
 
-// POST - Create admin
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     
-    // Check if body is already wrapped with "data" property
+    // Check if body is already wrapped with "data" property (from our makeAdminRequest)
+    // If so, pass it as is. Otherwise, wrap it.
     const requestBody = body.data ? body : { data: body }
     
-    const res = await fetch(`${siteConfig.api.baseURL}/admin`, {
+    const res = await fetch(`${siteConfig.api.baseURL}/admin/rooms`, {
       method: "POST",
       headers: {
         apikey: `${process.env.API_KEY}`,
@@ -49,25 +70,24 @@ export async function POST(req: Request) {
 
     return NextResponse.json(data)
   } catch (error) {
-    console.error("Error creating admin:", error)
+    console.error("Error creating room:", error)
     return NextResponse.json(
-      { success: false, message: "Failed to create admin" },
+      { success: false, message: "Failed to create room" },
       { status: 500 }
     )
   }
 }
 
-// PUT - Update admin
-export async function PUT(req: Request) {
+export async function PUT(req: NextRequest) {
   try {
     const body = await req.json()
     const url = new URL(req.url)
     
-    // Extract ID from path /api/admin/[id] or query parameter ?id=
+    // Extract ID from path /api/admin/rooms/[id] or query parameter ?id=
     const pathParts = url.pathname.split('/')
     let id = pathParts[pathParts.length - 1]
     
-    if (!id || id === 'api' || id === 'admin') {
+    if (!id || id === 'api' || id === 'admin' || id === 'rooms') {
       id = url.searchParams.get("id")
     }
 
@@ -78,19 +98,10 @@ export async function PUT(req: Request) {
       )
     }
 
-    // Extract the actual data and admin_id from request
-    const updateData = body.data || body
-    const adminId = updateData.admin_id
-    
-    // Create clean request body with only the necessary fields
-    const requestBody = {
-      data: {
-        ...updateData,
-        admin_id: adminId
-      }
-    }
+    // Check if body is already wrapped with "data" property
+    const requestBody = body.data ? body : { data: body }
 
-    const res = await fetch(`${siteConfig.api.baseURL}/admin/${id}`, {
+    const res = await fetch(`${siteConfig.api.baseURL}/rooms/${id}`, {
       method: "PUT",
       headers: {
         apikey: `${process.env.API_KEY}`,
@@ -116,31 +127,25 @@ export async function PUT(req: Request) {
 
     return NextResponse.json(data)
   } catch (error) {
-    console.error("Error updating admin:", error)
+    console.error("Error updating room:", error)
     return NextResponse.json(
-      { success: false, message: "Failed to update admin" },
+      { success: false, message: "Failed to update room" },
       { status: 500 }
     )
   }
 }
 
-// DELETE - Delete admin
-export async function DELETE(req: Request) {
+export async function DELETE(req: NextRequest) {
   try {
     const body = await req.json()
     const url = new URL(req.url)
     
-    // Extract ID from path /api/admin/[id] or query parameter ?id=
+    // Extract ID from path /api/admin/rooms/[id] or query parameter ?id=
     const pathParts = url.pathname.split('/')
-    console.log("DELETE route.ts - Full URL:", req.url)
-    console.log("DELETE route.ts - Pathname:", url.pathname)
-    console.log("DELETE route.ts - Path parts:", pathParts)
     let id = pathParts[pathParts.length - 1]
-    console.log("DELETE route.ts - ID from last part:", id)
     
-    if (!id || id === 'api' || id === 'admin') {
+    if (!id || id === 'api' || id === 'admin' || id === 'rooms') {
       id = url.searchParams.get("id")
-      console.log("DELETE route.ts - ID from query params:", id)
     }
 
     if (!id) {
@@ -150,15 +155,10 @@ export async function DELETE(req: Request) {
       )
     }
 
-    // Extract admin_id from request body and send only that
-    const adminId = body.data?.admin_id
-    const requestBody = {
-      data: {
-        admin_id: adminId
-      }
-    }
+    // Check if body is already wrapped with "data" property
+    const requestBody = body.data ? body : { data: body }
 
-    const res = await fetch(`${siteConfig.api.baseURL}/admin/${id}`, {
+    const res = await fetch(`${siteConfig.api.baseURL}/rooms/${id}`, {
       method: "DELETE",
       headers: {
         apikey: `${process.env.API_KEY}`,
@@ -174,7 +174,7 @@ export async function DELETE(req: Request) {
     } catch {
       if (!res.ok) {
         return NextResponse.json(
-          { success: false, message: text || "Failed to delete admin" },
+          { success: false, message: text || "Failed to delete room" },
           { status: res.status }
         )
       }
@@ -187,9 +187,9 @@ export async function DELETE(req: Request) {
 
     return NextResponse.json(data)
   } catch (error) {
-    console.error("Error deleting admin:", error)
+    console.error("Error deleting room:", error)
     return NextResponse.json(
-      { success: false, message: "Failed to delete admin" },
+      { success: false, message: "Failed to delete room" },
       { status: 500 }
     )
   }

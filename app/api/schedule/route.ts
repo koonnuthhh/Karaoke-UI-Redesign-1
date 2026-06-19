@@ -41,22 +41,22 @@ export async function GET(request: NextRequest) {
       {
         method: "GET",
         headers: {
-          APIKEY: APIKEY,
+          apikey: `${process.env.API_KEY}`,
           "Content-Type": "application/json",
         },
       },
     )
+
     const rawResponseroomdata = await responseroomdata.json()
-    //console.log("rawResponseroomdata : ", rawResponseroomdata)
     const roomData = rawResponseroomdata.data || []
-    console.log("Fetched Rooms:", roomData.length)
-    //console.log("Fetched RoomID:", roomData.room_id)
+
+
     const responsebooked = await fetch(
       `${process.env.API_PATH}/booking/date/${date}`,
       {
         method: "GET",
         headers: {
-          APIKEY: APIKEY,
+          apikey: `${process.env.API_KEY}`,
           "Content-Type": "application/json",
         },
       },
@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
 
     const rawResponsebooked = await responsebooked.json()
     const rawData = rawResponsebooked.data || []
-    console.log("Fetched bookings:", rawData.length)
+    // console.log("Fetched bookings:", rawData.length)
     //console.log(rawData)
 
 
@@ -132,7 +132,8 @@ export async function GET(request: NextRequest) {
           bookingEnd: realBooking?.end_time,
           startTime: time,
           status: status,
-          customerName: undefined,
+          customerName: realBooking?.username || null,
+          customerPhone: realBooking?.phone || null,
           customerID: realBooking?.user_id,
           price: realBooking?.price ?? room.price_per_half_hour,
           duration: siteConfig.schedule.slotDuration,

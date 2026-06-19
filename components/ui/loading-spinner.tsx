@@ -1,3 +1,5 @@
+import { siteConfig } from "../../config/site-config"
+
 export function LoadingSpinner({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
   const sizeClasses = {
     sm: "h-4 w-4",
@@ -6,6 +8,12 @@ export function LoadingSpinner({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
   }
 
   return (
-    <div className={`animate-spin rounded-full border-2 border-gray-300 border-t-purple-600 ${sizeClasses[size]}`} />
+    <div 
+      className={`animate-spin rounded-full border-2 ${sizeClasses[size]}`}
+      style={{
+        borderColor: '#e5e7eb',
+        borderTopColor: siteConfig.theme.primary
+      }}
+    />
   )
 }
