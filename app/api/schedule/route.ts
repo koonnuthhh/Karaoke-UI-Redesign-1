@@ -36,6 +36,20 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const date = searchParams.get("date") || new Date().toISOString().split("T")[0]
 
+    // Check if the requester is an admin (by looking for X-Admin-ID header)
+    const isAdmin = !!request.headers.get("X-Admin-ID")
+
+    // Only block past dates for non-admin (customer) users
+    if (!isAdmin) {
+      const today = new Date().toISOString().split("T")[0]
+      if (date < today) {
+        return NextResponse.json(
+          { error: "You cannot view past booking days" },
+          { status: 403 }
+        )
+      }
+    }
+
     const responseroomdata = await fetch(
       `${process.env.API_PATH}/admin/rooms`,
       {

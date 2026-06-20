@@ -1,5 +1,43 @@
 import { TimeSlot } from "types"
 
+function parseTimeToDate(time: string): Date {
+  return time < "06:00"
+    ? new Date(`2000-01-02T${time}`)
+    : new Date(`2000-01-01T${time}`)
+}
+
+export function addMinutesToTime(time: string, minutes: number): string {
+  const date = parseTimeToDate(time)
+  date.setMinutes(date.getMinutes() + minutes)
+  return date.toTimeString().slice(0, 5)
+}
+
+export function getMinutesBetween(startTime: string, endTime: string): number {
+  const startDate = parseTimeToDate(startTime)
+  const endDate = parseTimeToDate(endTime)
+
+  if (endDate <= startDate) {
+    endDate.setDate(endDate.getDate() + 1)
+  }
+
+  return Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60))
+}
+
+export function getAvailableDurations(
+  startTime: string,
+  availableEndTimes: string[],
+  minimumDuration = 60,
+  stepMinutes = 30,
+): number[] {
+  return Array.from(
+    new Set(
+      availableEndTimes
+        .map((endTime) => getMinutesBetween(startTime, endTime))
+        .filter((duration) => duration >= minimumDuration && duration % stepMinutes === 0),
+    ),
+  ).sort((a, b) => a - b)
+}
+
 
 export function generateTimeSlots(startTime: string, endTime: string, slotDuration = 30): string[] {
   const slots: string[] = []

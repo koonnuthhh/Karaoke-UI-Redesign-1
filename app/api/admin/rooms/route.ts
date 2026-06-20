@@ -101,7 +101,7 @@ export async function PUT(req: NextRequest) {
     // Check if body is already wrapped with "data" property
     const requestBody = body.data ? body : { data: body }
 
-    const res = await fetch(`${siteConfig.api.baseURL}/rooms/${id}`, {
+    const res = await fetch(`${siteConfig.api.baseURL}/admin/rooms/${id}`, {
       method: "PUT",
       headers: {
         apikey: `${process.env.API_KEY}`,
@@ -158,7 +158,7 @@ export async function DELETE(req: NextRequest) {
     // Check if body is already wrapped with "data" property
     const requestBody = body.data ? body : { data: body }
 
-    const res = await fetch(`${siteConfig.api.baseURL}/rooms/${id}`, {
+    const res = await fetch(`${siteConfig.api.baseURL}/admin/rooms/${id}`, {
       method: "DELETE",
       headers: {
         apikey: `${process.env.API_KEY}`,

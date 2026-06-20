@@ -34,7 +34,17 @@ class ApiClient {
       clearTimeout(timeoutId)
 
       if (!response.ok) {
-        throw new Error(`API Error: ${response.status} ${response.statusText}`)
+        // Try to extract error message from response body
+        let errorMessage = `API Error: ${response.status} ${response.statusText}`
+        try {
+          const errorBody = await response.json()
+          if (errorBody.error) {
+            errorMessage = errorBody.error
+          }
+        } catch {
+          // If parsing fails, use the default error message
+        }
+        throw new Error(errorMessage)
       }
 
       return await response.json()
@@ -47,8 +57,12 @@ class ApiClient {
     }
   }
 
-  async getSchedule(date: string): Promise<ScheduleData> {
-    return this.request<ScheduleData>(`/api/schedule?date=${date}`)
+  async getSchedule(date: string, adminId?: string): Promise<ScheduleData> {
+    const headers: Record<string, string> = {}
+    if (adminId) {
+      headers["X-Admin-ID"] = adminId
+    }
+    return this.request<ScheduleData>(`/api/schedule?date=${date}`, { headers })
   }
 }
 

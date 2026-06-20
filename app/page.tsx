@@ -41,10 +41,16 @@ export default function HomePage(
     setError("")
 
     try {
-      const data = await apiClient.getSchedule(selectedDate)
+      const data = await apiClient.getSchedule(selectedDate, adminCredential || undefined)
       setScheduleData(data)
     } catch (err) {
-      setError("Failed to load schedule. Please try again.")
+      const errorMsg = err instanceof Error ? err.message : ""
+      if (errorMsg.includes("past booking days")) {
+        setError("You cannot view past booking days. Please select a different date.")
+        setScheduleData(null)
+      } else {
+        setError("Failed to load schedule. Please try again.")
+      }
       console.error("Schedule fetch error:", err)
     } finally {
       setIsLoading(false)

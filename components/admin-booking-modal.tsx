@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { X } from "lucide-react"
 import { siteConfig } from "../config/site-config"
 import type { TimeSlot, Room, ScheduleData, BookingRequest } from "../types"
-import { calculatePrice, formatDuration, isTimeSlotAvailable } from "../lib/time-utils"
+import { addMinutesToTime, calculatePrice, formatDuration, getAvailableDurations, getMinutesBetween, isTimeSlotAvailable } from "../lib/time-utils"
 import { LoadingSpinner } from "../components/ui/loading-spinner"
 import { AlertModal } from "./AlertModal"
 import { PromoInput } from "./promo-input"
@@ -21,6 +21,8 @@ interface AdminBookingModalProps {
 export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleData, adminCredential }: AdminBookingModalProps) {
     const [startTime, setStartTime] = useState(timeSlot.startTime)
     const [endTime, setEndTime] = useState("")
+    const [selectionMode, setSelectionMode] = useState<"endTime" | "duration">("endTime")
+    const [duration, setDuration] = useState(60)
     const [customPrice, setCustomPrice] = useState<number | null>(null)
     const [discount, setDiscount] = useState<{ original_price: number; discount_amount: number; final_price: number } | null>(null)
     const [appliedPromoCode, setAppliedPromoCode] = useState<string | null>(null)
@@ -83,46 +85,28 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
         return true
     })
 
-    // default end time logic same as BookingModal
-    // Set default end time separately
+    const availableDurations = getAvailableDurations(startTime, availableEndTimes)
+
     useEffect(() => {
         if (isOpen && startTime) {
-            const [startHour, startMinute] = startTime.split(':').map(Number);
-            let endHour = startHour;
-            let endMinute = startMinute + 30;
-
-            if (endMinute >= 60) {
-                endMinute -= 60;
-                endHour += 1;
-            }
-            if (endHour >= 24) {
-                endHour -= 24;
-            }
-
-            const defaultEnd = `${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`;
-            if (scheduleData.timeSlots.includes(defaultEnd)) {
-                setEndTime(defaultEnd);
-            }
+            setEndTime(availableEndTimes[0] ?? "")
         }
-    }, [isOpen, startTime, scheduleData.timeSlots]);
+    }, [isOpen, startTime, availableEndTimes.join(",")])
 
-    // Reset custom price and discount when modal opens
     useEffect(() => {
-        if (isOpen) {
-            setCustomPrice(null)
-            setDiscount(null)
-            setAppliedPromoCode(null)
-            setAppliedPromotionId(null)
+        if (selectionMode === "duration" && startTime && endTime) {
+            setDuration(getMinutesBetween(startTime, endTime))
         }
-    }, [isOpen]);
+    }, [selectionMode, startTime, endTime])
 
-    const totalDuration = startTime && endTime
-        ? (() => {
-            let endTimeDate = endTime < "06:00" ? new Date(`2000-01-02T${endTime}`) : new Date(`2000-01-01T${endTime}`)
-            let startTimeDate = startTime < "06:00" ? new Date(`2000-01-02T${startTime}`) : new Date(`2000-01-01T${startTime}`)
-            return (endTimeDate.getTime() - startTimeDate.getTime()) / (1000 * 60)
-        })()
-        : 0
+    useEffect(() => {
+        if (selectionMode === "duration" && startTime && availableDurations.length > 0 && !availableDurations.includes(duration)) {
+            setDuration(availableDurations[0])
+        }
+    }, [selectionMode, startTime, availableDurations.join(",")])
+
+    const selectedEndTime = selectionMode === "duration" ? addMinutesToTime(startTime, duration) : endTime
+    const totalDuration = startTime && selectedEndTime ? getMinutesBetween(startTime, selectedEndTime) : 0
 
     const calculatedPrice = calculatePrice(room.price_per_half_hour, totalDuration)
 
@@ -168,8 +152,13 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
     }
 
     const createAndConfirmBooking = async () => {
-        if (!startTime || !endTime) {
-            setError("Please select both start and end times")
+        if (!startTime || !selectedEndTime) {
+            setError("Please select both start and end time settings")
+            return
+        }
+
+        if (!availableEndTimes.includes(selectedEndTime)) {
+            setError("Please select a valid end time")
             return
         }
         setIsSubmitting(true)
@@ -180,7 +169,7 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                 roomId: timeSlot.roomId,
                 roomName: timeSlot.roomName,
                 date: timeSlot.date,
-                timeSlots: [startTime, endTime],
+                timeSlots: [startTime, selectedEndTime],
                 totalPrice: finalPrice,
                 duration: totalDuration,
                 ...formData,
@@ -293,12 +282,23 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                             {/* Same UI as BookingModal */}
                             <div className="mb-6">
                                 <h3 className="font-semibold text-gray-900 mb-3">Select Time : Room {room.room_name}</h3>
+                                <div className="mb-4">
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Select by</label>
+                                    <select
+                                        value={selectionMode}
+                                        onChange={(e) => setSelectionMode(e.target.value as "endTime" | "duration")}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                    >
+                                        <option value="endTime">End Time</option>
+                                        <option value="duration">Duration</option>
+                                    </select>
+                                </div>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
                                         <select
                                             value={startTime}
-                                            onChange={(e) => { setStartTime(e.target.value); setEndTime(""); }}
+                                            onChange={(e) => { setStartTime(e.target.value); }}
                                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
                                         >
                                             {availableSlots.map((slot) => (
@@ -306,19 +306,37 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                                             ))}
                                         </select>
                                     </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">End Time</label>
-                                        <select
-                                            value={endTime}
-                                            onChange={(e) => setEndTime(e.target.value)}
-                                            disabled={!startTime}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-gray-100"
-                                        >
-                                            {availableEndTimes.map((slot) => (
-                                                <option key={slot} value={slot}>{slot}</option>
-                                            ))}
-                                        </select>
-                                    </div>
+                                    {selectionMode === "endTime" ? (
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">End Time</label>
+                                            <select
+                                                value={endTime}
+                                                onChange={(e) => setEndTime(e.target.value)}
+                                                disabled={!startTime || availableEndTimes.length === 0}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-gray-100"
+                                            >
+                                                {availableEndTimes.map((slot) => (
+                                                    <option key={slot} value={slot}>{slot}</option>
+                                                ))}
+                                            </select>
+                                            <p className="mt-2 text-xs text-gray-500">Duration: {formatDuration(totalDuration)}</p>
+                                        </div>
+                                    ) : (
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Duration</label>
+                                            <select
+                                                value={duration}
+                                                onChange={(e) => setDuration(Number(e.target.value))}
+                                                disabled={!startTime || availableDurations.length === 0}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-gray-100"
+                                            >
+                                                {availableDurations.map((slotDuration) => (
+                                                    <option key={slotDuration} value={slotDuration}>{formatDuration(slotDuration)}</option>
+                                                ))}
+                                            </select>
+                                            <p className="mt-2 text-xs text-gray-500">End Time: {selectedEndTime || "Not selected"}</p>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -327,7 +345,7 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                                 <h3 className="font-semibold text-purple-900 mb-2">Booking Summary</h3>
                                 <p><span className="font-medium">Room:</span> {room.room_name}</p>
                                 <p><span className="font-medium">Date:</span> {new Date(timeSlot.date).toLocaleDateString()}</p>
-                                <p><span className="font-medium">Time:</span> {startTime && endTime ? `${startTime} - ${endTime}` : "Not selected"}</p>
+                                <p><span className="font-medium">Time:</span> {startTime && selectedEndTime ? `${startTime} - ${selectedEndTime}` : "Not selected"}</p>
                                 <p><span className="font-medium">Duration:</span> {formatDuration(totalDuration)}</p>
                                 <p><span className="font-medium">Original Price:</span> ฿{calculatedPrice.toFixed(2)}</p>
                                 {customPrice !== null && (

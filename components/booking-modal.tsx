@@ -1,11 +1,18 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useEffect, useState } from "react"
 import { X } from "lucide-react"
 import { siteConfig } from "../config/site-config"
-import type { TimeSlot, Room, ScheduleData } from "../types"
-import { calculatePrice, formatDuration, isTimeSlotAvailable, getConsecutiveSlots } from "../lib/time-utils"
+import type { Room, ScheduleData, TimeSlot } from "../types"
+import {
+  addMinutesToTime,
+  calculatePrice,
+  formatDuration,
+  getAvailableDurations,
+  getMinutesBetween,
+  isTimeSlotAvailable,
+} from "../lib/time-utils"
 import { CheckoutModal } from "./checkout-modal"
 
 interface BookingModalProps {
@@ -16,46 +23,17 @@ interface BookingModalProps {
   scheduleData: ScheduleData
 }
 
-export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData}: BookingModalProps) {
+export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: BookingModalProps) {
   const [startTime, setStartTime] = useState(timeSlot.startTime)
   const [endTime, setEndTime] = useState("")
-
-  // Set default end time when modal opens
-  useEffect(() => {
-    if (isOpen && startTime) {
-      // Handle overnight hours properly
-      const [startHour, startMinute] = startTime.split(':').map(Number)
-      let endHour = startHour
-      let endMinute = startMinute + 60
-
-      if (endMinute >= 60) {
-        endMinute = endMinute - 60
-        endHour = endHour + 1
-      }
-
-      // Handle overnight (after 23:59, go to 00:00)
-      if (endHour >= 24) {
-        endHour = endHour - 24
-      }
-
-      const defaultEndTimeString = `${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`
-
-      // Check if default end time is available
-      const isDefaultEndTimeAvailable = scheduleData.timeSlots.includes(defaultEndTimeString)
-      //&& isTimeSlotAvailable(defaultEndTimeString, room.room_id, scheduleData.bookings)
-
-      if (isDefaultEndTimeAvailable) {
-        setEndTime(defaultEndTimeString)
-      }
-    }
-  }, [isOpen, startTime, room.room_id, scheduleData])
+  const [selectionMode, setSelectionMode] = useState<"endTime" | "duration">("endTime")
+  const [duration, setDuration] = useState(60)
   const [formData, setFormData] = useState({
     customerName: "",
     customerEmail: "",
     customerPhone: "",
     specialRequests: "",
   })
-  const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState("")
   const [showCheckout, setShowCheckout] = useState(false)
 
@@ -63,141 +41,77 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData}: B
     isTimeSlotAvailable(slot, room.room_id, scheduleData.bookings),
   )
 
-  // Find the first unavailable slot after start time
   const firstUnavailableSlot = scheduleData.timeSlots
-    .filter(slot => {
-      let slotTime;
-      let startTimeObj;
-
-      // Handle overnight hours for slot time
-      if (slot < "06:00") {
-        slotTime = new Date(`2000-01-02T${slot}`);
-      } else {
-        slotTime = new Date(`2000-01-01T${slot}`);
-      }
-
-      // Handle overnight hours for start time
-      if (startTime < "06:00") {
-        startTimeObj = new Date(`2000-01-02T${startTime}`);
-      } else {
-        startTimeObj = new Date(`2000-01-01T${startTime}`);
-      }
-
-      return slotTime > startTimeObj;
+    .filter((slot) => {
+      const slotTime = slot < "06:00" ? new Date(`2000-01-02T${slot}`) : new Date(`2000-01-01T${slot}`)
+      const startTimeObj = startTime < "06:00" ? new Date(`2000-01-02T${startTime}`) : new Date(`2000-01-01T${startTime}`)
+      return slotTime > startTimeObj
     })
-    .find(slot => !isTimeSlotAvailable(slot, room.room_id, scheduleData.bookings))
+    .find((slot) => !isTimeSlotAvailable(slot, room.room_id, scheduleData.bookings))
 
-  // Find the closing time slot
-  const firstCloseSlot = scheduleData.timeSlots.find(slot => slot === siteConfig.schedule.closeTime)
+  const firstCloseSlot = scheduleData.timeSlots.find((slot) => slot === siteConfig.schedule.closeTime)
 
-  // Available end times - must be after start time and before first unavailable slot or closing time
-  const availableEndTimes = scheduleData.timeSlots
-    .filter(slot => {
-      // Handle overnight hours properly
-      let startTimeObj;
-      let slotTime;
+  const availableEndTimes = scheduleData.timeSlots.filter((slot) => {
+    const startTimeObj = startTime < "06:00" ? new Date(`2000-01-02T${startTime}`) : new Date(`2000-01-01T${startTime}`)
+    const slotTime = slot < "06:00" ? new Date(`2000-01-02T${slot}`) : new Date(`2000-01-01T${slot}`)
 
-      // Convert start time to Date object
-      if (startTime < "06:00") {
-        startTimeObj = new Date(`2000-01-02T${startTime}`);
-      } else {
-        startTimeObj = new Date(`2000-01-01T${startTime}`);
-      }
+    startTimeObj.setMinutes(startTimeObj.getMinutes() + 30)
+    if (slotTime <= startTimeObj) return false
 
-      // Convert slot time to Date object
-      if (slot < "06:00") {
-        slotTime = new Date(`2000-01-02T${slot}`);
-      } else {
-        slotTime = new Date(`2000-01-01T${slot}`);
-      }
-      
-      //Ensure user to NOT be able to book 30 minutes
-      startTimeObj.setMinutes(startTimeObj.getMinutes() + 30)
-      // End time must be after start time
-      if (slotTime <= startTimeObj) return false;
+    if (firstUnavailableSlot) {
+      const unavailableTime =
+        firstUnavailableSlot < "06:00"
+          ? new Date(`2000-01-02T${firstUnavailableSlot}`)
+          : new Date(`2000-01-01T${firstUnavailableSlot}`)
+      if (slotTime > unavailableTime) return false
+    }
 
+    if (firstCloseSlot) {
+      const closeTime =
+        firstCloseSlot < "06:00" ? new Date(`2000-01-02T${firstCloseSlot}`) : new Date(`2000-01-01T${firstCloseSlot}`)
+      if (slotTime > closeTime) return false
+    }
 
+    return true
+  })
 
-      // Must be before the first unavailable slot (if any)
-      if (firstUnavailableSlot) {
-        let unavailableTime;
-        if (firstUnavailableSlot < "06:00") {
-          unavailableTime = new Date(`2000-01-02T${firstUnavailableSlot}`);
-        } else {
-          unavailableTime = new Date(`2000-01-01T${firstUnavailableSlot}`);
-        }
-        if (slotTime > unavailableTime) return false;
-      }
+  const availableDurations = getAvailableDurations(startTime, availableEndTimes)
 
-      // Must be before or equal to closing time
-      if (firstCloseSlot) {
-        let closeTime;
-        if (firstCloseSlot < "06:00") {
-          closeTime = new Date(`2000-01-02T${firstCloseSlot}`);
-        } else {
-          closeTime = new Date(`2000-01-01T${firstCloseSlot}`);
-        }
-        if (slotTime > closeTime) return false;
-      }
+  useEffect(() => {
+    if (isOpen && startTime) {
+      setEndTime(availableEndTimes[0] ?? "")
+    }
+  }, [isOpen, startTime, availableEndTimes.join(",")])
 
-      return true;
-    })
+  useEffect(() => {
+    if (selectionMode === "duration" && startTime && endTime) {
+      setDuration(getMinutesBetween(startTime, endTime))
+    }
+  }, [selectionMode, startTime, endTime])
 
-  // Debug logging
-  // console.log('=== DEBUG: Booking Modal ===')
-  // console.log('Site config close time:', siteConfig.schedule.closeTime)
-  // console.log('First close slot found:', firstCloseSlot)
-  // console.log('Start time:', startTime)
-  // console.log('End time: ', endTime)
-  // console.log('ScheduleData.timeSlots (all available time slots):', scheduleData.timeSlots)
-  // console.log('Available slots (filtered for this room):', availableSlots)
-  // console.log('Available end times:', availableEndTimes)
-  // console.log('First unavailable slot:', firstUnavailableSlot)
-  // console.log('Room ID:', room.room_id)
-  // console.log('Schedule data bookings:', scheduleData.bookings)
-  // console.log('=== END DEBUG ===')
+  useEffect(() => {
+    if (selectionMode === "duration" && startTime && availableDurations.length > 0 && !availableDurations.includes(duration)) {
+      setDuration(availableDurations[0])
+    }
+  }, [selectionMode, startTime, availableDurations.join(",")])
 
-  const totalDuration = startTime && endTime ?
-    (() => {
-      let endTimeDate
-      let startTimeDate
-      if (endTime < "06:00") {
-        endTimeDate = new Date(`2000-01-02T${endTime}`)
-      } else {
-        endTimeDate = new Date(`2000-01-01T${endTime}`)
-      }
-
-      if (startTime < "06:00") {
-        startTimeDate = new Date(`2000-01-02T${startTime}`)
-      } else {
-        startTimeDate = new Date(`2000-01-01T${startTime}`)
-      }
-      return (endTimeDate.getTime() - startTimeDate.getTime()) / (1000 * 60)
-    })() : 0
+  const selectedEndTime = selectionMode === "duration" ? addMinutesToTime(startTime, duration) : endTime
+  const totalDuration = startTime && selectedEndTime ? getMinutesBetween(startTime, selectedEndTime) : 0
   const totalPrice = calculatePrice(room.price_per_half_hour, totalDuration)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!startTime || !endTime) {
-      setError("Please select both start and end times")
+    if (!startTime || !selectedEndTime) {
+      setError("Please select both start and end time settings")
       return
     }
 
-    // Check if end time is after start time (handling overnight)
-    let endTimeDate
-    if (endTime < "06:00") {
-      endTimeDate = new Date(`2000-01-02T${endTime}`)
-    } else {
-      endTimeDate = new Date(`2000-01-01T${endTime}`)
-    }
-    const startTimeDate = new Date(`2000-01-01T${startTime}`)
-
-    if (endTimeDate <= startTimeDate) {
-      setError("End time must be after start time")
+    if (!availableEndTimes.includes(selectedEndTime)) {
+      setError("Please select a valid end time")
       return
     }
-    //console.log("timeslot.roomNameee: ",timeSlot.roomName)
+
     setShowCheckout(true)
   }
 
@@ -213,36 +127,50 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData}: B
     onClose()
   }
 
-
   if (!isOpen) return null
 
   return (
     <>
-      <div
-        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
-        onClick={onClose}
-      >
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={onClose}>
         <div
           className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex items-center justify-between p-6 border-b" style={{ borderColor: '#e5e7eb' }}>
-            <h2 className="text-xl font-bold" style={{ color: siteConfig.theme.maintext }}>{"Book Your Karaoke Session"}</h2>
-            <button 
-              onClick={onClose} 
+          <div className="flex items-center justify-between p-6 border-b" style={{ borderColor: "#e5e7eb" }}>
+            <h2 className="text-xl font-bold" style={{ color: siteConfig.theme.maintext }}>
+              Book Your Karaoke Session
+            </h2>
+            <button
+              onClick={onClose}
               className="transition-colors"
-              style={{ color: '#9ca3af' }}
-              onMouseEnter={(e) => e.currentTarget.style.color = '#6b7280'}
-              onMouseLeave={(e) => e.currentTarget.style.color = '#9ca3af'}
+              style={{ color: "#9ca3af" }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "#6b7280")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "#9ca3af")}
             >
               <X className="w-6 h-6" />
             </button>
           </div>
 
           <div className="p-6">
-            {/* Time Selection */}
             <div className="mb-6">
-              <h3 className="font-semibold mb-3" style={{ color: siteConfig.theme.maintext }}>Select Time : Room {room.room_name}</h3>
+              <h3 className="font-semibold mb-3" style={{ color: siteConfig.theme.maintext }}>
+                Select Time : {room.room_name}
+              </h3>
+              <div className="mb-4">
+                <label htmlFor="selectionMode" className="block text-sm font-medium mb-1" style={{ color: siteConfig.theme.maintext }}>
+                  Select by
+                </label>
+                <select
+                  id="selectionMode"
+                  value={selectionMode}
+                  onChange={(e) => setSelectionMode(e.target.value as "endTime" | "duration")}
+                  className="w-full px-3 py-2 border rounded-md focus:outline-none"
+                  style={{ borderColor: "#d1d5db", color: siteConfig.theme.maintext }}
+                >
+                  <option value="endTime">End Time</option>
+                  <option value="duration">Duration</option>
+                </select>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label htmlFor="startTime" className="block text-sm font-medium mb-1" style={{ color: siteConfig.theme.maintext }}>
@@ -253,20 +181,16 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData}: B
                     value={startTime}
                     onChange={(e) => {
                       setStartTime(e.target.value)
-                      setEndTime("") // Reset end time when start time changes
                     }}
                     className="w-full px-3 py-2 border rounded-md focus:outline-none"
-                    style={{
-                      borderColor: '#d1d5db',
-                      color: siteConfig.theme.maintext
-                    }}
+                    style={{ borderColor: "#d1d5db", color: siteConfig.theme.maintext }}
                     onFocus={(e) => {
-                      e.target.style.borderColor = 'transparent'
+                      e.target.style.borderColor = "transparent"
                       e.target.style.boxShadow = `0 0 0 2px ${siteConfig.theme.maintext}`
                     }}
                     onBlur={(e) => {
-                      e.target.style.borderColor = '#d1d5db'
-                      e.target.style.boxShadow = 'none'
+                      e.target.style.borderColor = "#d1d5db"
+                      e.target.style.boxShadow = "none"
                     }}
                   >
                     {availableSlots.map((slot) => (
@@ -276,45 +200,68 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData}: B
                     ))}
                   </select>
                 </div>
-                <div>
-                  <label htmlFor="endTime" className="block text-sm font-medium mb-1" style={{ color: siteConfig.theme.maintext }}>
-                    End Time
-                  </label>
-                  <select
-                    id="endTime"
-                    value={endTime}
-                    onChange={(e) => setEndTime(e.target.value)}
-                    disabled={!startTime}
-                    className="w-full px-3 py-2 border rounded-md focus:outline-none disabled:cursor-not-allowed"
-                    style={{
-                      borderColor: '#d1d5db',
-                      backgroundColor: !startTime ? '#f3f4f6' : 'white',
-                      color: siteConfig.theme.maintext
-                    }}
-                    onFocus={(e) => {
-                      if (startTime) {
-                        e.target.style.borderColor = 'transparent'
-                        e.target.style.boxShadow = `0 0 0 2px ${siteConfig.theme.maintext}`
-                      }
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = '#d1d5db'
-                      e.target.style.boxShadow = 'none'
-                    }}
-                  >
-                    {availableEndTimes.map((slot) => (
-                      <option key={slot} value={slot}>
-                        {slot}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {selectionMode === "endTime" ? (
+                  <div>
+                    <label htmlFor="endTime" className="block text-sm font-medium mb-1" style={{ color: siteConfig.theme.maintext }}>
+                      End Time
+                    </label>
+                    <select
+                      id="endTime"
+                      value={endTime}
+                      onChange={(e) => setEndTime(e.target.value)}
+                      disabled={!startTime || availableEndTimes.length === 0}
+                      className="w-full px-3 py-2 border rounded-md focus:outline-none disabled:cursor-not-allowed"
+                      style={{
+                        borderColor: "#d1d5db",
+                        backgroundColor: !startTime || availableEndTimes.length === 0 ? "#f3f4f6" : "white",
+                        color: siteConfig.theme.maintext,
+                      }}
+                    >
+                      {availableEndTimes.map((slot) => (
+                        <option key={slot} value={slot}>
+                          {slot}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="mt-2 text-xs" style={{ color: siteConfig.theme.secondary }}>
+                      Duration: {formatDuration(totalDuration)}
+                    </p>
+                  </div>
+                ) : (
+                  <div>
+                    <label htmlFor="duration" className="block text-sm font-medium mb-1" style={{ color: siteConfig.theme.maintext }}>
+                      Duration
+                    </label>
+                    <select
+                      id="duration"
+                      value={duration}
+                      onChange={(e) => setDuration(Number(e.target.value))}
+                      disabled={!startTime || availableDurations.length === 0}
+                      className="w-full px-3 py-2 border rounded-md focus:outline-none disabled:cursor-not-allowed"
+                      style={{
+                        borderColor: "#d1d5db",
+                        backgroundColor: !startTime || availableDurations.length === 0 ? "#f3f4f6" : "white",
+                        color: siteConfig.theme.maintext,
+                      }}
+                    >
+                      {availableDurations.map((slotDuration) => (
+                        <option key={slotDuration} value={slotDuration}>
+                          {formatDuration(slotDuration)}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="mt-2 text-xs" style={{ color: siteConfig.theme.secondary }}>
+                      End Time: {selectedEndTime || "Not selected"}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* Booking Summary */}
-            <div className="rounded-lg p-4 mb-6" style={{ backgroundColor: '#f3f4f6' }}>
-              <h3 className="font-semibold mb-2" style={{ color: siteConfig.theme.primary }}>Booking Summary</h3>
+            <div className="rounded-lg p-4 mb-6" style={{ backgroundColor: "#f3f4f6" }}>
+              <h3 className="font-semibold mb-2" style={{ color: siteConfig.theme.primary }}>
+                Booking Summary
+              </h3>
               <div className="space-y-1 text-sm" style={{ color: siteConfig.theme.secondary }}>
                 <p>
                   <span className="font-medium">Room:</span> {room.room_name}
@@ -323,7 +270,7 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData}: B
                   <span className="font-medium">Date:</span> {new Date(timeSlot.date).toLocaleDateString()}
                 </p>
                 <p>
-                  <span className="font-medium">Time:</span> {startTime && endTime ? `${startTime} - ${endTime}` : "Not selected"}
+                  <span className="font-medium">Time:</span> {startTime && selectedEndTime ? `${startTime} - ${selectedEndTime}` : "Not selected"}
                 </p>
                 <p>
                   <span className="font-medium">Duration:</span> {formatDuration(totalDuration)}
@@ -331,25 +278,9 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData}: B
                 <p>
                   <span className="font-medium">Total Price:</span> ฿{totalPrice.toFixed(2)}
                 </p>
-                {/* <p>
-                  <span className="font-medium">Capacity:</span> {room.capacity}
-                </p> */}
               </div>
             </div>
 
-            {/* Room Features */}
-            {/* <div className="mb-6">
-            <h4 className="font-medium text-gray-900 mb-2">Room Features</h4>
-            <div className="flex flex-wrap gap-2">
-              {room.features.map((feature, index) => (
-                <span key={index} className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
-                  {feature}
-                </span>
-              ))}
-            </div>
-          </div> */}
-
-            {/* Booking Form */}
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label htmlFor="customerName" className="block text-sm font-medium mb-1" style={{ color: siteConfig.theme.maintext }}>
@@ -363,27 +294,9 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData}: B
                   value={formData.customerName}
                   onChange={handleInputChange}
                   className="w-full px-3 py-2 border rounded-md focus:outline-none"
-                  style={{
-                    borderColor: '#d1d5db',
-                    color: siteConfig.theme.maintext
-                  }}
+                  style={{ borderColor: "#d1d5db", color: siteConfig.theme.maintext }}
                 />
               </div>
-
-              {/* <div>
-                <label htmlFor="customerEmail" className="block text-sm font-medium text-gray-700 mb-1">
-                  Email Address 
-                </label>
-                <input
-                  type="email"
-                  id="customerEmail"
-                  name="customerEmail"
-                  // required
-                  value={formData.customerEmail}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                />
-              </div> */}
 
               <div>
                 <label htmlFor="customerPhone" className="block text-sm font-medium mb-1" style={{ color: siteConfig.theme.maintext }}>
@@ -397,31 +310,15 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData}: B
                   value={formData.customerPhone}
                   onChange={handleInputChange}
                   className="w-full px-3 py-2 border rounded-md focus:outline-none"
-                  style={{
-                    borderColor: '#d1d5db',
-                    color: siteConfig.theme.maintext
-                  }}
+                  style={{ borderColor: "#d1d5db", color: siteConfig.theme.maintext }}
                 />
               </div>
 
-              {/* <div>
-                <label htmlFor="specialRequests" className="block text-sm font-medium text-gray-700 mb-1">
-                  Special Requests (Optional)
-                </label>
-                <textarea
-                  id="specialRequests"
-                  name="specialRequests"
-                  rows={3}
-                  value={formData.specialRequests}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  placeholder="Any special requests or requirements..."
-                />
-              </div> */}
-
               {error && (
-                <div className="p-3 border rounded-md" style={{ backgroundColor: '#fef2f2', borderColor: '#fecaca' }}>
-                  <p className="text-sm" style={{ color: siteConfig.theme.error }}>{error}</p>
+                <div className="p-3 border rounded-md" style={{ backgroundColor: "#fef2f2", borderColor: "#fecaca" }}>
+                  <p className="text-sm" style={{ color: siteConfig.theme.error }}>
+                    {error}
+                  </p>
                 </div>
               )}
 
@@ -430,22 +327,19 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData}: B
                   type="button"
                   onClick={onClose}
                   className="flex-1 px-4 py-2 rounded-md transition-colors"
-                  style={{ 
-                    color: siteConfig.theme.maintext, 
-                    backgroundColor: '#f3f4f6'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e5e7eb'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
+                  style={{ color: siteConfig.theme.maintext, backgroundColor: "#f3f4f6" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#e5e7eb")}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#f3f4f6")}
                 >
-                  {"Cancel"}
+                  Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={!startTime || !endTime}
+                  disabled={!startTime || !selectedEndTime || (selectionMode === "endTime" ? availableEndTimes.length === 0 : availableDurations.length === 0)}
                   className="flex-1 px-4 py-2 text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                   style={{ backgroundColor: siteConfig.theme.primary }}
-                  onMouseEnter={(e) => !(!startTime || !endTime) && (e.currentTarget.style.backgroundColor = siteConfig.theme.secondary)}
-                  onMouseLeave={(e) => !(!startTime || !endTime) && (e.currentTarget.style.backgroundColor = siteConfig.theme.primary)}
+                  onMouseEnter={(e) => !(!startTime || !selectedEndTime || (selectionMode === "endTime" ? availableEndTimes.length === 0 : availableDurations.length === 0)) && (e.currentTarget.style.backgroundColor = siteConfig.theme.secondary)}
+                  onMouseLeave={(e) => !(!startTime || !selectedEndTime || (selectionMode === "endTime" ? availableEndTimes.length === 0 : availableDurations.length === 0)) && (e.currentTarget.style.backgroundColor = siteConfig.theme.primary)}
                 >
                   Proceed to Checkout - ฿{totalPrice.toFixed(2)}
                 </button>
@@ -454,7 +348,7 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData}: B
           </div>
         </div>
       </div>
-      {/* Checkout Modal */}
+
       {showCheckout && (
         <CheckoutModal
           isOpen={showCheckout}
