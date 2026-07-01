@@ -1,0 +1,34 @@
+[
+  {
+    "room_id": "room-001",
+    "room_name": "Room A - Small",
+    "price_per_half_hour": 150,
+    "is_active": true,
+    "features": ["TV 55\"", "Mic x2", "Sofa"],
+    "color": "rgb(43, 170, 243)"
+  },
+  {
+    "room_id": "room-002",
+    "room_name": "Room B - Medium",
+    "price_per_half_hour": 250,
+    "is_active": true,
+    "features": ["TV 65\"", "Mic x4", "Sofa", "Disco Lights"],
+    "color": "rgba(88, 233, 31, 1)"
+  },
+  {
+    "room_id": "room-003",
+    "room_name": "Room C - Large",
+    "price_per_half_hour": 400,
+    "is_active": true,
+    "features": ["TV 75\"", "Mic x6", "Sofa", "Disco Lights", "Smoke Machine"],
+    "color": "rgba(255, 129, 129, 1)"
+  },
+  {
+    "room_id": "room-004",
+    "room_name": "Room D - VIP",
+    "price_per_half_hour": 600,
+    "is_active": false,
+    "features": ["TV 85\"", "Mic x8", "Private Bar", "Disco Lights"],
+    "color": "rgb(150,150,150)"
+  }
+]

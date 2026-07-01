@@ -146,11 +146,13 @@ function SlotCell({
             return (
               <div>
                 {/* Conditional rendering: show customer name if they are non-empty, otherwise show "Booked" */}
-                
+
                 <div className="font-medium truncate max-w-[5rem]">{ slot.customerName != null ? slot.customerName : "Anonymous" }</div>
-                {/* {adminCredential && slot.customerName && (
-              <div className="text-xs text-red-700">Booked</div>
-            )} */}
+                {(slot.bookingStart || slot.bookingEnd) && (
+                  <div className="text-[10px] sm:text-xs truncate max-w-[5rem] opacity-80">
+                    {slot.bookingStart?.slice(0, 5)} - {slot.bookingEnd?.slice(0, 5)}
+                  </div>
+                )}
               </div>
             )
           }

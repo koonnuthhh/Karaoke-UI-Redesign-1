@@ -1,0 +1,16 @@
+[
+  {
+    "admin_id": "demo-admin-001",
+    "username": "admin",
+    "password": "karaoke2024",
+    "email": "admin@alurfia.com",
+    "role": "admin"
+  },
+  {
+    "admin_id": "demo-admin-002",
+    "username": "moderator",
+    "password": "moderator2024",
+    "email": "moderator@alurfia.com",
+    "role": "modulator"
+  }
+]

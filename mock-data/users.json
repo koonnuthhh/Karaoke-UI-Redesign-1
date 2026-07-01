@@ -1,0 +1,23 @@
+[
+  {
+    "user_id": "user-001",
+    "username": "Somchai Jaidee",
+    "email": "somchai@example.com",
+    "phone": "0812345678",
+    "is_guest": true
+  },
+  {
+    "user_id": "user-002",
+    "username": "Suda Meechai",
+    "email": "suda@example.com",
+    "phone": "0898765432",
+    "is_guest": true
+  },
+  {
+    "user_id": "user-003",
+    "username": "Anan Wongsa",
+    "email": "anan@example.com",
+    "phone": "0865554433",
+    "is_guest": true
+  }
+]
