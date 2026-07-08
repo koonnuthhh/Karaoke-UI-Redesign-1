@@ -26,22 +26,31 @@ function SlotCell({
   slot,
   onClick,
   adminCredential,
-  scheduleDate
+  scheduleDate,
+  roomActive,
 }: {
   slot: TimeSlot
   onClick: (slot: TimeSlot) => void
   adminCredential: string | null// Added adminCredential to SlotCell props
   scheduleDate: string
+  roomActive: boolean
 }) {
   //console.log("Slot:",slot)
   const [isHover, setIsHover] = useState(false)
   const currentUser = getAdminUser()
   const isModulator = currentUser?.role === "modulator"
-  
+
+  // Inactive rooms are shown but can't be booked by customers
+  const isDisabledForBooking = !roomActive && !adminCredential
+
   function getSlotStyles(slot: TimeSlot): string {
     const status = slot.status
     const isPast = isTimeSlotPast(slot.startTime, scheduleDate)
     const baseStyles = "p-1.5 sm:p-2 text-center text-xs sm:text-sm border rounded cursor-pointer transition-colors duration-200"
+
+    if (isDisabledForBooking) {
+      return `${baseStyles} ${siteConfig.theme.maintext} border-gray-200 cursor-not-allowed`
+    }
 
     // If time slot has passed, make it non-clickable for non-admin users
     if (isPast && !adminCredential) {
@@ -76,12 +85,16 @@ function SlotCell({
   function getSlotColor(slot: TimeSlot, isHover: boolean): string {
     const status = slot.status
     const isPast = isTimeSlotPast(slot.startTime, scheduleDate)
-    
+
+    if (isDisabledForBooking) {
+      return siteConfig.theme.roomclosed
+    }
+
     // If time slot has passed and user is not admin, show grayed out
     if (isPast && !adminCredential) {
       return siteConfig.theme.roomclosed
     }
-    
+
     switch (status) {
       case "booked":
         return siteConfig.theme.roombooked
@@ -113,13 +126,18 @@ function SlotCell({
         style={{ background: getSlotColor(slot, isHover) }}
         // Added adminCredential check for clickability of booked and pending slots
         onClick={() => {
+          // Inactive rooms can't be booked by customers
+          if (isDisabledForBooking) {
+            return
+          }
+
           const isPast = isTimeSlotPast(slot.startTime, scheduleDate)
-          
+
           // Prevent clicking on past slots for non-admin users
           if (isPast && !adminCredential) {
             return
           }
-          
+
           // Admin: can click any slot except pending
           if (adminCredential) {
             if (slot.status !== "pending") {
@@ -135,9 +153,13 @@ function SlotCell({
       >
         {/* Check if slot is greyed out (unavailable) */}
         {(() => {
+          if (isDisabledForBooking) {
+            return <div className="font-medium truncate max-w-[5rem]">Closed</div>
+          }
+
           const isPast = isTimeSlotPast(slot.startTime, scheduleDate)
           const isUnavailable = (isPast || slot.status === "closed" ) && !adminCredential &&  slot.status !== "booked"
-          
+
           if (isUnavailable) {
             return <div className="font-medium truncate max-w-[5rem]">Unavailable</div>
           }
@@ -246,9 +268,11 @@ export function ScheduleTable({ scheduleData, isLoading, adminCredential, handle
             <thead className="sticky top-0 z-50" style={{ backgroundColor: '#f9fafb' }}>
               <tr>
                 <th className="px-2 sm:px-3 py-1.5 sm:py-3 text-left text-xs font-medium uppercase tracking-wider" style={{ color: siteConfig.theme.maintext }}>
-                  Start time
+                  Time
                 </th>
-                {scheduleData.rooms.filter((room) => room.is_active).sort((a, b) => a.room_name.localeCompare(b.room_name)).map((room) => (
+                {scheduleData.rooms
+                  // .filter((room) => room.is_active)
+                  .sort((a, b) => a.room_name.localeCompare(b.room_name)).map((room) => (
                   <th
                     key={room.room_id}
                     className="px-1.5 sm:px-4 py-1.5 sm:py-3 text-center text-xs font-medium uppercase tracking-wider"
@@ -256,6 +280,11 @@ export function ScheduleTable({ scheduleData, isLoading, adminCredential, handle
                   >
                     <div className="flex flex-col items-center">
                       <span className="font-semibold">{room.room_name}</span>
+                      {!room.is_active && (
+                        <span className="text-[10px] font-normal normal-case" style={{ color: siteConfig.theme.error }}>
+                          Closed
+                        </span>
+                      )}
                       {/* <span className="text-xs text-gray-400">{room.capacity}</span> */}
                       {/* <span className="text-xs font-bold text-purple-600">
                         ฿{room.price_per_half_hour * 2}/hr
@@ -271,8 +300,10 @@ export function ScheduleTable({ scheduleData, isLoading, adminCredential, handle
                   <td className="px-2 sm:px-4 py-1.5 sm:py-3 whitespace-nowrap text-xs sm:text-sm font-medium" style={{ color: siteConfig.theme.maintext }}>
                     {timeSlot}
                   </td>
-                  {scheduleData.rooms.filter((room) => room.is_active).sort((a, b) => a.room_name.localeCompare(b.room_name)).map((room) => {
-                    const slot = scheduleData.bookings.find((booking) => {
+                  {scheduleData.rooms
+                    // .filter((room) => room.is_active)
+                    .sort((a, b) => a.room_name.localeCompare(b.room_name)).map((room) => {
+                      const slot = scheduleData.bookings.find((booking) => {
                       return (
                         booking.roomId === room.room_id &&
                         booking.startTime === timeSlot
@@ -302,6 +333,7 @@ export function ScheduleTable({ scheduleData, isLoading, adminCredential, handle
                         onClick={handleSlotClick}
                         adminCredential={adminCredential} // Pass the adminCredential prop down
                         scheduleDate={scheduleData.date}
+                        roomActive={room.is_active}
                       />
                     )
                   })}
