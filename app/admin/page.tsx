@@ -117,6 +117,12 @@ export default function AdminPanel() {
                 {tab.icon} <span>{tab.label}</span>
               </button>
             ))}
+            <button
+              onClick={() => router.push("/")}
+              className="py-4 px-3 sm:px-4 border-b-2 border-transparent font-medium text-xs sm:text-sm flex items-center gap-1.5 sm:gap-2 transition whitespace-nowrap text-slate-500 hover:text-slate-700"
+            >
+              <Calendar className="w-4 h-4" /> <span>Schedule</span>
+            </button>
           </div>
         </div>
       </div>
