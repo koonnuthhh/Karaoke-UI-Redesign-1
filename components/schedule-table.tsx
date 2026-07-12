@@ -138,11 +138,9 @@ function SlotCell({
             return
           }
 
-          // Admin: can click any slot except pending
+          // Admin: can click any slot, including pending (to view/cancel it)
           if (adminCredential) {
-            if (slot.status !== "pending") {
-              onClick(slot)
-            }
+            onClick(slot)
           } else {
             // Regular users: only available or cancelled slots are clickable
             if (slot.status === "available" || slot.status === "cancelled") {

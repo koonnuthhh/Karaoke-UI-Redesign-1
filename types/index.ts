@@ -105,6 +105,7 @@ export interface Promotion {
   endDate?: string  // Legacy support
   start_time?: string
   end_time?: string
+  applicable_days?: number[] // Days of week the promo is active, 0=Sunday..6=Saturday; empty/undefined = every day
   is_active?: boolean
   isActive?: boolean  // Legacy support
   is_room_specific?: boolean

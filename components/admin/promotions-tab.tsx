@@ -68,6 +68,7 @@ export function PromotionsTab({ promotions, dataLoading, adminCredential, onRefr
       is_active: formData.isActive !== undefined ? formData.isActive : (formData.is_active !== undefined ? formData.is_active : true),
       is_room_specific: formData.is_room_specific || false,
       applicable_room_ids: formData.applicable_room_ids || [],
+      applicable_days: formData.applicable_days || [],
     }
 
     // Convert discount field based on type
@@ -420,6 +421,7 @@ export function PromotionsTab({ promotions, dataLoading, adminCredential, onRefr
                               isActive: promo.isActive ?? promo.is_active ?? true,
                               is_room_specific: promo.is_room_specific || false,
                               applicable_room_ids: promo.applicable_room_ids || [],
+                              applicable_days: promo.applicable_days || [],
                             }
                             
                             console.log("EditData.id will be:", editData.id)
@@ -560,7 +562,7 @@ export function PromotionsTab({ promotions, dataLoading, adminCredential, onRefr
               </div>
               <div>
                 <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Start Time</label>
-                <p className="text-xs text-gray-500 mb-2">Promotion becomes active at this time of the first day</p>
+                <p className="text-xs text-gray-500 mb-2">Promotion is only active from this time each day</p>
                 <input
                   type="time"
                   value={formData.start_time || "00:00"}
@@ -571,7 +573,7 @@ export function PromotionsTab({ promotions, dataLoading, adminCredential, onRefr
               </div>
               <div>
                 <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">End Time</label>
-                <p className="text-xs text-gray-500 mb-2">Promotion expires at this time of the last day</p>
+                <p className="text-xs text-gray-500 mb-2">...until this time, every day (e.g. 12:00 - 16:00)</p>
                 <input
                   type="time"
                   value={formData.end_time || "23:59"}
@@ -579,6 +581,38 @@ export function PromotionsTab({ promotions, dataLoading, adminCredential, onRefr
                   disabled={!isCreateMode && !isAuthorized}
                   className="w-full px-1 sm:px-3 py-1 sm:py-2 text-xs sm:text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
+              </div>
+              <div>
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Active Days</label>
+                <p className="text-xs text-gray-500 mb-2">Leave all unchecked to apply every day</p>
+                <div className="flex flex-wrap gap-2">
+                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((label, dayIndex) => {
+                    const selectedDays = formData.applicable_days || []
+                    const isChecked = selectedDays.includes(dayIndex)
+                    return (
+                      <label
+                        key={dayIndex}
+                        className={`flex items-center gap-1 px-2 py-1 text-xs rounded-md border cursor-pointer ${
+                          isChecked ? "bg-purple-50 border-purple-400 text-purple-700" : "border-gray-300 text-gray-700"
+                        } ${!isCreateMode && !isAuthorized ? "opacity-50 cursor-not-allowed" : ""}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            const newDays = e.target.checked
+                              ? [...selectedDays, dayIndex]
+                              : selectedDays.filter((d) => d !== dayIndex)
+                            setFormData({ ...formData, applicable_days: newDays })
+                          }}
+                          disabled={!isCreateMode && !isAuthorized}
+                          className="w-3 h-3 rounded border-gray-300 text-purple-600 focus:ring-purple-500 disabled:cursor-not-allowed"
+                        />
+                        {label}
+                      </label>
+                    )
+                  })}
+                </div>
               </div>
               <div>
                 <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Max Uses</label>

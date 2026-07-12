@@ -37,7 +37,8 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
     const currentUser = getAdminUser()
     const isModulator = currentUser?.role === "modulator"
     
-    const bookedSlot = timeSlot.status === "booked"
+    const isManageableSlot = timeSlot.status === "booked" || timeSlot.status === "pending"
+    const bookedSlot = isManageableSlot
         ? scheduleData.bookings.find(b => b.id === timeSlot.id)
         : null
 
@@ -139,6 +140,10 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                             data: {
                                 code: appliedPromoCode,
                                 total_price: priceToUse,
+                                roomId: room.room_id,
+                                date: timeSlot.date,
+                                time: startTime,
+                                endTime,
                             },
                         }),
                     })
@@ -263,7 +268,7 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
             <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between p-6 border-b">
                     <h2 className="text-xl font-bold">
-                        {timeSlot.status === "booked" ? "Booking Details" : "Admin Booking"}
+                        {timeSlot.status === "booked" ? "Booking Details" : timeSlot.status === "pending" ? "Pending Booking Details" : "Admin Booking"}
                     </h2>
                     <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
                         <X className="w-6 h-6" />
@@ -271,11 +276,14 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                 </div>
 
                 <div className="p-6">
-                    {timeSlot.status === "booked" ? (
+                    {isManageableSlot ? (
                         <>
                             <p><strong>Customer:</strong> {bookedSlot?.customerName ?? timeSlot.customerName ?? "Unknown"}</p>
                             <p><strong>Phone:</strong> {bookedSlot?.customerPhone ?? timeSlot.customerPhone ?? "Not provided"}</p>
                             <p><strong>Time:</strong> {timeSlot.bookingStart} - {timeSlot.bookingEnd}</p>
+                            {timeSlot.status === "pending" && (
+                                <p><strong>Status:</strong> <span className="text-yellow-600 font-medium">Pending</span></p>
+                            )}
                             <div className="mt-4 flex gap-3">
                                 <button
                                     onClick={handleCancelBooking}
@@ -380,6 +388,9 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                             <PromoInput
                                 cartTotal={priceBeforeDiscount}
                                 roomId={room.room_id}
+                                bookingDate={timeSlot.date}
+                                bookingTime={startTime}
+                                bookingEndTime={endTime}
                                 externalDiscount={discount}
                                 onPromoApplied={(finalPrice, discountAmount, promoCode, promotionId) => {
                                     if (promoCode === "") {

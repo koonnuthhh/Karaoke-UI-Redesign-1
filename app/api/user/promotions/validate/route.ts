@@ -4,13 +4,16 @@ interface ValidatePromoRequest {
   data: {
     code: string
     roomId?: string
+    date?: string
+    time?: string
+    endTime?: string
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body: ValidatePromoRequest = await request.json()
-    const { code, roomId } = body.data || {}
+    const { code, roomId, date, time, endTime } = body.data || {}
 
     if (!code || !code.trim()) {
       return NextResponse.json(
@@ -26,12 +29,23 @@ export async function POST(request: NextRequest) {
     const requestData: any = {
       code: code.toUpperCase().trim(),
     }
-    
+
     // Include roomId if provided (for room-specific promotions)
     if (roomId) {
       requestData.roomId = roomId
     }
-    
+
+    // Check promotion validity against the date/time being booked, not right now
+    if (date) {
+      requestData.date = date
+    }
+    if (time) {
+      requestData.time = time
+    }
+    if (endTime) {
+      requestData.endTime = endTime
+    }
+
     const response = await fetch(`${process.env.API_PATH}/user/promotions/validate`, {
       method: "POST",
       headers: {
@@ -51,7 +65,7 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           error: {
-            message: "Promotion code is invalid",
+            message: result.error?.message || "Promotion code is invalid",
           },
         },
         { status: 400 }

@@ -76,8 +76,17 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const bookingstatus = await request.json()
+    const { booking_id, booking_status, ...editableFields } = bookingstatus
 
-    const response = await fetch(`${process.env.API_PATH}/booking/${bookingstatus.booking_id}`, {
+    // Forward any editable fields as-is (room_id, username, phone, start_time, end_time,
+    // price, promotion_id, ...) alongside the status mapping, so admin edits aren't
+    // silently dropped by an allowlist here.
+    const data: any = { ...editableFields }
+    if (booking_status) {
+      data.status = booking_status
+    }
+
+    const response = await fetch(`${process.env.API_PATH}/booking/${booking_id}`, {
       method: 'PUT',
       headers: {
         apikey: `${process.env.API_KEY}`,
@@ -85,10 +94,7 @@ export async function PUT(request: NextRequest) {
       },
       body: JSON.stringify({
         timestamp: new Date().toISOString(),
-        data: {
-          status: bookingstatus.booking_status,
-          ...(bookingstatus.promotion_id && { promotion_id: bookingstatus.promotion_id }),
-        }
+        data
       })
     });
     const result = await response.json();

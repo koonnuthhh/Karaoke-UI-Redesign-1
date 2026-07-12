@@ -7,6 +7,9 @@ import { siteConfig } from "@/config/site-config"
 interface PromoInputProps {
   cartTotal: number
   roomId?: string
+  bookingDate?: string
+  bookingTime?: string
+  bookingEndTime?: string
   onPromoApplied?: (finalPrice: number, discountAmount: number, promoCode: string, promotionId?: string) => void
   externalDiscount?: { original_price: number; discount_amount: number; final_price: number; promotion_id?: string } | null
 }
@@ -19,7 +22,7 @@ interface DiscountResult {
   message?: string
 }
 
-export function PromoInput({ cartTotal, roomId, onPromoApplied, externalDiscount }: PromoInputProps) {
+export function PromoInput({ cartTotal, roomId, bookingDate, bookingTime, bookingEndTime, onPromoApplied, externalDiscount }: PromoInputProps) {
   const [code, setCode] = useState("")
   const [discount, setDiscount] = useState<DiscountResult | null>(null)
   const [error, setError] = useState("")
@@ -47,11 +50,14 @@ export function PromoInput({ cartTotal, roomId, onPromoApplied, externalDiscount
       const response = await fetch("/api/user/promotions/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          data: { 
+        body: JSON.stringify({
+          data: {
             code: trimmedCode,
-            ...(roomId && { roomId })
-          } 
+            ...(roomId && { roomId }),
+            ...(bookingDate && { date: bookingDate }),
+            ...(bookingTime && { time: bookingTime }),
+            ...(bookingEndTime && { endTime: bookingEndTime })
+          }
         }),
       })
 
@@ -96,7 +102,18 @@ export function PromoInput({ cartTotal, roomId, onPromoApplied, externalDiscount
       if (roomId) {
         requestBody.data.roomId = roomId
       }
-      
+
+      // Check promotion validity against the date/time being booked, not right now
+      if (bookingDate) {
+        requestBody.data.date = bookingDate
+      }
+      if (bookingTime) {
+        requestBody.data.time = bookingTime
+      }
+      if (bookingEndTime) {
+        requestBody.data.endTime = bookingEndTime
+      }
+
       const response = await fetch("/api/user/promotions/apply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

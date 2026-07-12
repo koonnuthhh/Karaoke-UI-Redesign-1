@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect, useRef } from "react"
-import { X, Upload, Check, AlertCircle, Loader2 } from "lucide-react"
+import { X, Upload, Check, AlertCircle, Loader2, Minus, Plus } from "lucide-react"
 import { siteConfig } from "../config/site-config"
 import type { TimeSlot, Room, ScheduleData } from "../types"
 import { calculatePrice, formatDuration, isTimeSlotAvailable } from "../lib/time-utils"
@@ -19,7 +19,8 @@ interface BookingModalProps {
   scheduleData: ScheduleData
 }
 
-type Step = "select" | "confirm" | "payment" | "slip-upload" | "verification" | "success"
+type Step = "details" | "confirm" | "payment" | "slip-upload" | "verify"
+type VerifyState = "pending" | "success" | "failed"
 
 interface PaymentData {
   qrPayload: string
@@ -37,20 +38,35 @@ interface SlipVerificationResult {
 }
 
 const STEP_LABELS: { step: Step; label: string }[] = [
-  { step: "select", label: "Details" },
+  { step: "details", label: "Details" },
   { step: "confirm", label: "Confirm" },
   { step: "payment", label: "Payment" },
   { step: "slip-upload", label: "Upload" },
-  { step: "verification", label: "Verify" },
-  { step: "success", label: "Success" },
+  { step: "verify", label: "Verify" },
 ]
 
-export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: BookingModalProps) {
-  const [currentStep, setCurrentStep] = useState<Step>("select")
+const MIN_DURATION_HALF_STEPS = 2 // 1 hour minimum booking
 
-  // --- Step 1: time + customer details ---
-  const [startTime, setStartTime] = useState(timeSlot.startTime)
-  const [endTime, setEndTime] = useState("")
+// Treats times before 06:00 as belonging to "the next day" so overnight
+// hours (e.g. open 12:00, close 01:00) compare correctly.
+function toComparableDate(time: string): Date {
+  return time < "06:00" ? new Date(`2000-01-02T${time}:00`) : new Date(`2000-01-01T${time}:00`)
+}
+
+function addMinutes(time: string, minutes: number): string {
+  const date = toComparableDate(time)
+  date.setMinutes(date.getMinutes() + minutes)
+  const hh = date.getHours().toString().padStart(2, "0")
+  const mm = date.getMinutes().toString().padStart(2, "0")
+  return `${hh}:${mm}`
+}
+
+export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: BookingModalProps) {
+  const [currentStep, setCurrentStep] = useState<Step>("details")
+
+  // --- Step 1: duration + customer details + promo ---
+  const startTime = timeSlot.startTime
+  const [durationHalfSteps, setDurationHalfSteps] = useState(MIN_DURATION_HALF_STEPS)
   const [formData, setFormData] = useState({
     customerName: "",
     customerEmail: "",
@@ -58,45 +74,68 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
     specialRequests: "",
   })
   const [selectError, setSelectError] = useState("")
+  const [discountAmount, setDiscountAmount] = useState(0)
+  const [promoFinalPrice, setPromoFinalPrice] = useState(0)
+  const [promotionId, setPromotionId] = useState<string>("")
 
   // --- Checkout flow state ---
   const [paymentData, setPaymentData] = useState<PaymentData | null>(null)
   const [slipFile, setSlipFile] = useState<File | null>(null)
   const [slipPreview, setSlipPreview] = useState<string | null>(null)
   const [verificationResult, setVerificationResult] = useState<SlipVerificationResult | null>(null)
+  const [verifyState, setVerifyState] = useState<VerifyState>("pending")
+  const verifyStartedRef = useRef(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [timeoutSeconds, setTimeoutSeconds] = useState(300) // 5 minutes
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const timeoutStartedRef = useRef(false)
   const [isTimeoutExpired, setIsTimeoutExpired] = useState(false)
-  const [discountAmount, setDiscountAmount] = useState(0)
-  const [finalPrice, setFinalPrice] = useState(0)
-  const [promotionId, setPromotionId] = useState<string>("")
 
-  // Set default end time when modal opens / start time changes
-  useEffect(() => {
-    if (isOpen && startTime) {
-      const [startHour, startMinute] = startTime.split(":").map(Number)
-      let endHour = startHour
-      let endMinute = startMinute + 60
+  // Only the last slot before close (01:00) can extend the booking past
+  // normal closing time, and only up to 02:00 in that one case.
+  const isMidnightHalf = startTime === "00:30"
+  const effectiveCloseTime = isMidnightHalf ? "02:00" : siteConfig.schedule.closeTime
 
-      if (endMinute >= 60) {
-        endMinute -= 60
-        endHour += 1
-      }
-      if (endHour >= 24) {
-        endHour -= 24
-      }
+  const firstUnavailableSlot = scheduleData.timeSlots
+    .filter((slot) => toComparableDate(slot) > toComparableDate(startTime))
+    .find((slot) => !isTimeSlotAvailable(slot, room.room_id, scheduleData.bookings))
 
-      const defaultEndTimeString = `${endHour.toString().padStart(2, "0")}:${endMinute.toString().padStart(2, "0")}`
-      const isDefaultEndTimeAvailable = scheduleData.timeSlots.includes(defaultEndTimeString)
+  const minutesUntilClose =
+    (toComparableDate(effectiveCloseTime).getTime() - toComparableDate(startTime).getTime()) / (1000 * 60)
 
-      if (isDefaultEndTimeAvailable) {
-        setEndTime(defaultEndTimeString)
-      }
-    }
-  }, [isOpen, startTime, room.room_id, scheduleData])
+  const minutesUntilConflict = firstUnavailableSlot
+    ? (toComparableDate(firstUnavailableSlot).getTime() - toComparableDate(startTime).getTime()) / (1000 * 60)
+    : Infinity
+
+  const maxDurationMinutes = Math.max(0, Math.min(minutesUntilClose, minutesUntilConflict))
+  const maxDurationHalfSteps = Math.floor(maxDurationMinutes / 30)
+  const canBookMinimum = maxDurationHalfSteps >= MIN_DURATION_HALF_STEPS
+
+  const clampedDurationHalfSteps = Math.min(
+    Math.max(durationHalfSteps, MIN_DURATION_HALF_STEPS),
+    Math.max(maxDurationHalfSteps, MIN_DURATION_HALF_STEPS),
+  )
+
+  const totalDuration = clampedDurationHalfSteps * 30
+  const endTime = addMinutes(startTime, totalDuration)
+  const totalPrice = calculatePrice(room.price_per_half_hour, totalDuration)
+  const finalPrice = discountAmount > 0 ? promoFinalPrice : totalPrice
+
+  const resetAppliedPromo = () => {
+    setDiscountAmount(0)
+    setPromotionId("")
+  }
+
+  const incrementDuration = () => {
+    setDurationHalfSteps((prev) => Math.min(prev + 1, Math.max(maxDurationHalfSteps, MIN_DURATION_HALF_STEPS)))
+    resetAppliedPromo()
+  }
+
+  const decrementDuration = () => {
+    setDurationHalfSteps((prev) => Math.max(prev - 1, MIN_DURATION_HALF_STEPS))
+    resetAppliedPromo()
+  }
 
   // Handle timeout expiration
   useEffect(() => {
@@ -134,52 +173,6 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
     return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`
   }
 
-  const availableSlots = scheduleData.timeSlots.filter((slot) =>
-    isTimeSlotAvailable(slot, room.room_id, scheduleData.bookings),
-  )
-
-  const firstUnavailableSlot = scheduleData.timeSlots
-    .filter((slot) => {
-      const slotTime = slot < "06:00" ? new Date(`2000-01-02T${slot}`) : new Date(`2000-01-01T${slot}`)
-      const startTimeObj = startTime < "06:00" ? new Date(`2000-01-02T${startTime}`) : new Date(`2000-01-01T${startTime}`)
-      return slotTime > startTimeObj
-    })
-    .find((slot) => !isTimeSlotAvailable(slot, room.room_id, scheduleData.bookings))
-
-  const firstCloseSlot = scheduleData.timeSlots.find((slot) => slot === siteConfig.schedule.closeTime)
-
-  const availableEndTimes = scheduleData.timeSlots.filter((slot) => {
-    const startTimeObj = startTime < "06:00" ? new Date(`2000-01-02T${startTime}`) : new Date(`2000-01-01T${startTime}`)
-    const slotTime = slot < "06:00" ? new Date(`2000-01-02T${slot}`) : new Date(`2000-01-01T${slot}`)
-
-    startTimeObj.setMinutes(startTimeObj.getMinutes() + 30)
-    if (slotTime <= startTimeObj) return false
-
-    if (firstUnavailableSlot) {
-      const unavailableTime =
-        firstUnavailableSlot < "06:00" ? new Date(`2000-01-02T${firstUnavailableSlot}`) : new Date(`2000-01-01T${firstUnavailableSlot}`)
-      if (slotTime > unavailableTime) return false
-    }
-
-    if (firstCloseSlot) {
-      const closeTime = firstCloseSlot < "06:00" ? new Date(`2000-01-02T${firstCloseSlot}`) : new Date(`2000-01-01T${firstCloseSlot}`)
-      if (slotTime > closeTime) return false
-    }
-
-    return true
-  })
-
-  const totalDuration =
-    startTime && endTime
-      ? (() => {
-          const endTimeDate = endTime < "06:00" ? new Date(`2000-01-02T${endTime}`) : new Date(`2000-01-01T${endTime}`)
-          const startTimeDate = startTime < "06:00" ? new Date(`2000-01-02T${startTime}`) : new Date(`2000-01-01T${startTime}`)
-          return (endTimeDate.getTime() - startTimeDate.getTime()) / (1000 * 60)
-        })()
-      : 0
-
-  const totalPrice = calculatePrice(room.price_per_half_hour, totalDuration)
-
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData((prev) => ({
       ...prev,
@@ -187,24 +180,18 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
     }))
   }
 
-  const handleSelectSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-
-    if (!startTime || !endTime) {
-      setSelectError("Please select both start and end times")
+  const handleContinueToConfirm = () => {
+    if (!canBookMinimum) {
+      setSelectError("This time slot can't accommodate the minimum 1 hour booking")
       return
     }
 
-    const endTimeDate = endTime < "06:00" ? new Date(`2000-01-02T${endTime}`) : new Date(`2000-01-01T${endTime}`)
-    const startTimeDate = new Date(`2000-01-01T${startTime}`)
-
-    if (endTimeDate <= startTimeDate) {
-      setSelectError("End time must be after start time")
+    if (!formData.customerName.trim() || !formData.customerPhone.trim()) {
+      setSelectError("Please fill in your name and phone number")
       return
     }
 
     setSelectError("")
-    setFinalPrice(totalPrice)
     setCurrentStep("confirm")
   }
 
@@ -308,18 +295,27 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
 
         if (bookedResult.success) {
           setVerificationResult(result)
-          setCurrentStep("success")
+          setVerifyState("success")
+        } else {
+          setError(bookedResult.message || "Failed to finalize booking")
+          setVerifyState("failed")
         }
       } else {
         setError(result.message || "Payment verification failed")
-        setCurrentStep("slip-upload")
+        setVerifyState("failed")
       }
     } catch (err) {
       setError("Failed to verify payment slip. Please try again or crop out the QR section in your slip.")
-      setCurrentStep("slip-upload")
+      setVerifyState("failed")
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleRetryVerification = () => {
+    verifyStartedRef.current = false
+    setVerifyState("pending")
+    setCurrentStep("slip-upload")
   }
 
   const handleCancelBooking = async () => {
@@ -350,91 +346,87 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
     }
   }
 
-  // Auto-start verification when reaching verification step
-  if (currentStep === "verification" && !isLoading) {
-    handleSlipVerification()
-  }
+  // Auto-start verification once when entering the verify step
+  useEffect(() => {
+    if (currentStep === "verify" && !verifyStartedRef.current) {
+      verifyStartedRef.current = true
+      handleSlipVerification()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep])
 
   if (!isOpen) return null
 
-  const renderSelectStep = () => (
+  const secondaryButtonClass = "flex-1 px-4 py-2 rounded-md transition-colors"
+  const secondaryButtonStyle = { color: siteConfig.theme.maintext, backgroundColor: "#f3f4f6" }
+  const secondaryButtonHover = (e: React.MouseEvent<HTMLButtonElement>) => (e.currentTarget.style.backgroundColor = "#e5e7eb")
+  const secondaryButtonLeave = (e: React.MouseEvent<HTMLButtonElement>) => (e.currentTarget.style.backgroundColor = "#f3f4f6")
+
+  const renderDetailsBody = () => (
     <div className="p-6">
       <div className="mb-6">
         <h3 className="font-semibold mb-3" style={{ color: siteConfig.theme.maintext }}>
-          Select Time : Room {room.room_name}
+          Select Duration : Room {room.room_name}
         </h3>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="startTime" className="block text-sm font-medium mb-1" style={{ color: siteConfig.theme.maintext }}>
+        <div className="rounded-lg border p-4" style={{ borderColor: "#d1d5db" }}>
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-sm font-medium" style={{ color: siteConfig.theme.maintext }}>
               Start Time
-            </label>
-            <select
-              id="startTime"
-              value={startTime}
-              onChange={(e) => {
-                setStartTime(e.target.value)
-                setEndTime("")
-              }}
-              className="w-full px-3 py-2 border rounded-md focus:outline-none"
-              style={{ borderColor: "#d1d5db", color: siteConfig.theme.maintext }}
-            >
-              {availableSlots.map((slot) => (
-                <option key={slot} value={slot}>
-                  {slot}
-                </option>
-              ))}
-            </select>
+            </span>
+            <span className="text-sm font-semibold" style={{ color: siteConfig.theme.maintext }}>
+              {startTime}
+            </span>
           </div>
-          <div>
-            <label htmlFor="endTime" className="block text-sm font-medium mb-1" style={{ color: siteConfig.theme.maintext }}>
-              End Time
-            </label>
-            <select
-              id="endTime"
-              value={endTime}
-              onChange={(e) => setEndTime(e.target.value)}
-              disabled={!startTime}
-              className="w-full px-3 py-2 border rounded-md focus:outline-none disabled:cursor-not-allowed"
-              style={{
-                borderColor: "#d1d5db",
-                backgroundColor: !startTime ? "#f3f4f6" : "white",
-                color: siteConfig.theme.maintext,
-              }}
-            >
-              {availableEndTimes.map((slot) => (
-                <option key={slot} value={slot}>
-                  {slot}
-                </option>
-              ))}
-            </select>
+
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium" style={{ color: siteConfig.theme.maintext }}>
+              Duration
+            </span>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={decrementDuration}
+                disabled={clampedDurationHalfSteps <= MIN_DURATION_HALF_STEPS}
+                className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full border transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ borderColor: siteConfig.theme.primary, color: siteConfig.theme.primary }}
+                aria-label="Decrease duration by 30 minutes"
+              >
+                <Minus className="w-4 h-4" />
+              </button>
+              {/* Fixed width so the text length changing (e.g. "1 hour" vs "1 hour 30 minutes")
+                  never shifts the +/- buttons out from under repeated clicks. */}
+              <span
+                className="w-[9.5rem] flex-shrink-0 text-center font-semibold whitespace-nowrap"
+                style={{ color: siteConfig.theme.maintext }}
+              >
+                {formatDuration(totalDuration)}
+              </span>
+              <button
+                type="button"
+                onClick={incrementDuration}
+                disabled={!canBookMinimum || clampedDurationHalfSteps >= maxDurationHalfSteps}
+                className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full border transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ borderColor: siteConfig.theme.primary, color: siteConfig.theme.primary }}
+                aria-label="Increase duration by 30 minutes"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between mt-4 pt-3 border-t text-sm" style={{ borderColor: "#e5e7eb", color: "#6b7280" }}>
+            <span>End Time</span>
+            <span>{endTime}</span>
           </div>
         </div>
+        {!canBookMinimum && (
+          <p className="text-sm mt-2" style={{ color: siteConfig.theme.error }}>
+            This time slot can't accommodate the minimum 1 hour booking.
+          </p>
+        )}
       </div>
 
-      <div className="rounded-lg p-4 mb-6" style={{ backgroundColor: "#f3f4f6" }}>
-        <h3 className="font-semibold mb-2" style={{ color: siteConfig.theme.primary }}>
-          Booking Summary
-        </h3>
-        <div className="space-y-1 text-sm" style={{ color: siteConfig.theme.secondary }}>
-          <p>
-            <span className="font-medium">Room:</span> {room.room_name}
-          </p>
-          <p>
-            <span className="font-medium">Date:</span> {new Date(timeSlot.date).toLocaleDateString()}
-          </p>
-          <p>
-            <span className="font-medium">Time:</span> {startTime && endTime ? `${startTime} - ${endTime}` : "Not selected"}
-          </p>
-          <p>
-            <span className="font-medium">Duration:</span> {formatDuration(totalDuration)}
-          </p>
-          <p>
-            <span className="font-medium">Total Price:</span> ฿{totalPrice.toFixed(2)}
-          </p>
-        </div>
-      </div>
-
-      <form onSubmit={handleSelectSubmit} className="space-y-4">
+      <div className="space-y-4">
         <div>
           <label htmlFor="customerName" className="block text-sm font-medium mb-1" style={{ color: siteConfig.theme.maintext }}>
             Name *
@@ -467,6 +459,20 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
           />
         </div>
 
+        <PromoInput
+          key={clampedDurationHalfSteps}
+          cartTotal={totalPrice}
+          roomId={timeSlot.roomId}
+          bookingDate={timeSlot.date}
+          bookingTime={startTime}
+          bookingEndTime={endTime}
+          onPromoApplied={(newFinalPrice, discount, _promoCode, newPromotionId) => {
+            setPromoFinalPrice(newFinalPrice)
+            setDiscountAmount(discount)
+            setPromotionId(newPromotionId || "")
+          }}
+        />
+
         {selectError && (
           <div className="p-3 border rounded-md" style={{ backgroundColor: "#fef2f2", borderColor: "#fecaca" }}>
             <p className="text-sm" style={{ color: siteConfig.theme.error }}>
@@ -475,33 +481,59 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
           </div>
         )}
 
-        <div className="flex gap-3 pt-4">
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex-1 px-4 py-2 rounded-md transition-colors"
-            style={{ color: siteConfig.theme.maintext, backgroundColor: "#f3f4f6" }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#e5e7eb")}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#f3f4f6")}
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={!startTime || !endTime}
-            className="flex-1 px-4 py-2 text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-            style={{ backgroundColor: siteConfig.theme.primary }}
-            onMouseEnter={(e) => !(!startTime || !endTime) && (e.currentTarget.style.backgroundColor = siteConfig.theme.secondary)}
-            onMouseLeave={(e) => !(!startTime || !endTime) && (e.currentTarget.style.backgroundColor = siteConfig.theme.primary)}
-          >
-            Continue to Confirmation - ฿{totalPrice.toFixed(2)}
-          </button>
+        <div className="rounded-lg p-4 mb-6" style={{ backgroundColor: "#f3f4f6" }}>
+          <h3 className="font-semibold mb-2" style={{ color: siteConfig.theme.primary }}>
+            Booking Summary
+          </h3>
+          <div className="space-y-1 text-sm" style={{ color: siteConfig.theme.secondary }}>
+            <p>
+              <span className="font-medium">Room:</span> {room.room_name}
+            </p>
+            <p>
+              <span className="font-medium">Date:</span> {new Date(timeSlot.date).toLocaleDateString()}
+            </p>
+            <p>
+              <span className="font-medium">Time:</span> {startTime} - {endTime}
+            </p>
+            <p>
+              <span className="font-medium">Duration:</span> {formatDuration(totalDuration)}
+            </p>
+            <p>
+              <span className="font-medium">Total Price:</span> ฿{totalPrice.toFixed(2)}
+            </p>
+          </div>
         </div>
-      </form>
+      </div>
     </div>
   )
 
-  const renderConfirmStep = () => (
+  const renderDetailsFooter = () => (
+    <div className="flex gap-3">
+      <button
+        type="button"
+        onClick={onClose}
+        className={secondaryButtonClass}
+        style={secondaryButtonStyle}
+        onMouseEnter={secondaryButtonHover}
+        onMouseLeave={secondaryButtonLeave}
+      >
+        Cancel
+      </button>
+      <button
+        type="button"
+        onClick={handleContinueToConfirm}
+        disabled={!canBookMinimum}
+        className="flex-1 px-4 py-2 text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+        style={{ backgroundColor: siteConfig.theme.primary }}
+        onMouseEnter={(e) => canBookMinimum && (e.currentTarget.style.backgroundColor = siteConfig.theme.secondary)}
+        onMouseLeave={(e) => canBookMinimum && (e.currentTarget.style.backgroundColor = siteConfig.theme.primary)}
+      >
+        Continue to Confirmation - ฿{finalPrice.toFixed(2)}
+      </button>
+    </div>
+  )
+
+  const renderConfirmBody = () => (
     <div className="p-6">
       <div className="rounded-lg p-4 mb-6" style={{ backgroundColor: "#f3f4f6" }}>
         <h3 className="font-semibold mb-2" style={{ color: siteConfig.theme.maintext }}>
@@ -520,7 +552,7 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
           </p>
           <p>
             <span className="font-medium">Duration: </span>
-            {totalDuration} minutes
+            {formatDuration(totalDuration)}
           </p>
           <p>
             <span className="font-medium">Customer:</span> {formData.customerName}
@@ -551,57 +583,49 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
         </div>
       </div>
 
-      <PromoInput
-        cartTotal={totalPrice}
-        roomId={timeSlot.roomId}
-        onPromoApplied={(newFinalPrice, discount, _promoCode, newPromotionId) => {
-          setFinalPrice(newFinalPrice)
-          setDiscountAmount(discount)
-          setPromotionId(newPromotionId || "")
-        }}
-      />
-
       {error && (
-        <div className="p-3 border rounded-md mb-4 mt-4" style={{ backgroundColor: "#fef2f2", borderColor: "#fecaca" }}>
+        <div className="p-3 border rounded-md mb-4" style={{ backgroundColor: "#fef2f2", borderColor: "#fecaca" }}>
           <p className="text-sm" style={{ color: siteConfig.theme.error }}>
             {error}
           </p>
         </div>
       )}
-
-      <div className="flex gap-3 mt-6">
-        <button
-          type="button"
-          onClick={() => setCurrentStep("select")}
-          className="flex-1 px-4 py-2 rounded-md transition-colors"
-          style={{ color: siteConfig.theme.maintext, backgroundColor: "#f3f4f6" }}
-          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#e5e7eb")}
-          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#f3f4f6")}
-        >
-          Back
-        </button>
-        <button
-          onClick={handleBookingSubmit}
-          disabled={isLoading}
-          className="flex-1 px-4 py-2 text-white rounded-md transition-colors disabled:opacity-50 flex items-center justify-center"
-          style={{ backgroundColor: siteConfig.theme.primary }}
-          onMouseEnter={(e) => !isLoading && (e.currentTarget.style.backgroundColor = siteConfig.theme.secondary)}
-          onMouseLeave={(e) => !isLoading && (e.currentTarget.style.backgroundColor = siteConfig.theme.primary)}
-        >
-          {isLoading ? (
-            <>
-              <LoadingSpinner size="sm" />
-              <span className="ml-2">Processing...</span>
-            </>
-          ) : (
-            "Proceed to Payment"
-          )}
-        </button>
-      </div>
     </div>
   )
 
-  const renderPaymentStep = () => (
+  const renderConfirmFooter = () => (
+    <div className="flex gap-3">
+      <button
+        type="button"
+        onClick={() => setCurrentStep("details")}
+        className={secondaryButtonClass}
+        style={secondaryButtonStyle}
+        onMouseEnter={secondaryButtonHover}
+        onMouseLeave={secondaryButtonLeave}
+      >
+        Back
+      </button>
+      <button
+        onClick={handleBookingSubmit}
+        disabled={isLoading}
+        className="flex-1 px-4 py-2 text-white rounded-md transition-colors disabled:opacity-50 flex items-center justify-center"
+        style={{ backgroundColor: siteConfig.theme.primary }}
+        onMouseEnter={(e) => !isLoading && (e.currentTarget.style.backgroundColor = siteConfig.theme.secondary)}
+        onMouseLeave={(e) => !isLoading && (e.currentTarget.style.backgroundColor = siteConfig.theme.primary)}
+      >
+        {isLoading ? (
+          <>
+            <LoadingSpinner size="sm" />
+            <span className="ml-2">Processing...</span>
+          </>
+        ) : (
+          "Proceed to Payment"
+        )}
+      </button>
+    </div>
+  )
+
+  const renderPaymentBody = () => (
     <div className="p-6">
       <div className="text-center mb-6">
         <div className="bg-white p-4 rounded-lg border-2 border-dashed mb-4" style={{ borderColor: "#d1d5db" }}>
@@ -620,7 +644,7 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
         </div>
       </div>
 
-      <div className="rounded-lg p-4 mb-6" style={{ backgroundColor: "#eff6ff" }}>
+      <div className="rounded-lg p-4" style={{ backgroundColor: "#eff6ff" }}>
         <h3 className="font-semibold mb-2" style={{ color: siteConfig.theme.secondary }}>
           Payment Instructions
         </h3>
@@ -635,31 +659,33 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
           *If you can't scan please transfer money using the promptpay number*
         </ol>
       </div>
-
-      <div className="flex gap-3">
-        <button
-          onClick={handleCancelBooking}
-          className="flex-1 px-4 py-2 rounded-md transition-colors"
-          style={{ color: siteConfig.theme.primary, backgroundColor: "#f3f4f6" }}
-          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#e5e7eb")}
-          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#f3f4f6")}
-        >
-          Back
-        </button>
-        <button
-          onClick={() => setCurrentStep("slip-upload")}
-          className="flex-1 px-4 py-2 text-white rounded-md transition-colors"
-          style={{ backgroundColor: siteConfig.theme.primary }}
-          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = siteConfig.theme.secondary)}
-          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = siteConfig.theme.primary)}
-        >
-          I've Made Payment
-        </button>
-      </div>
     </div>
   )
 
-  const renderSlipUploadStep = () => (
+  const renderPaymentFooter = () => (
+    <div className="flex gap-3">
+      <button
+        onClick={handleCancelBooking}
+        className="flex-1 px-4 py-2 rounded-md transition-colors"
+        style={{ color: siteConfig.theme.primary, backgroundColor: "#f3f4f6" }}
+        onMouseEnter={secondaryButtonHover}
+        onMouseLeave={secondaryButtonLeave}
+      >
+        Back
+      </button>
+      <button
+        onClick={() => setCurrentStep("slip-upload")}
+        className="flex-1 px-4 py-2 text-white rounded-md transition-colors"
+        style={{ backgroundColor: siteConfig.theme.primary }}
+        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = siteConfig.theme.secondary)}
+        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = siteConfig.theme.primary)}
+      >
+        Verify Slip
+      </button>
+    </div>
+  )
+
+  const renderSlipUploadBody = () => (
     <div className="p-6">
       <div className="mb-6">
         <label className="block text-sm font-medium mb-2" style={{ color: siteConfig.theme.maintext }}>
@@ -726,102 +752,124 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
           </div>
         </div>
       )}
-
-      <div className="flex gap-3">
-        <button
-          onClick={() => setCurrentStep("payment")}
-          className="flex-1 px-4 py-2 rounded-md transition-colors"
-          style={{ color: siteConfig.theme.primary, backgroundColor: "#f3f4f6" }}
-          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#e5e7eb")}
-          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#f3f4f6")}
-        >
-          Back
-        </button>
-        <button
-          onClick={() => setCurrentStep("verification")}
-          disabled={!slipFile}
-          className="flex-1 px-4 py-2 text-white rounded-md transition-colors disabled:opacity-50"
-          style={{ backgroundColor: siteConfig.theme.primary }}
-          onMouseEnter={(e) => !!slipFile && (e.currentTarget.style.backgroundColor = siteConfig.theme.secondary)}
-          onMouseLeave={(e) => !!slipFile && (e.currentTarget.style.backgroundColor = siteConfig.theme.primary)}
-        >
-          Verify Payment
-        </button>
-      </div>
     </div>
   )
 
-  const renderVerificationStep = () => (
-    <div className="p-6 text-center">
-      <div className="mb-6">
-        <Loader2 className="mx-auto w-16 h-16 animate-spin" style={{ color: siteConfig.theme.maintext }} />
-        <h3 className="text-lg font-bold mt-4 mb-2" style={{ color: siteConfig.theme.maintext }}>
-          Verifying Payment
-        </h3>
-        <p style={{ color: siteConfig.theme.secondary }}>Please wait while we verify your payment slip...</p>
-      </div>
-
-      <div className="rounded-lg p-4" style={{ backgroundColor: "#eff6ff" }}>
-        <p className="text-sm" style={{ color: siteConfig.theme.secondary }}>
-          This process usually takes 10-30 seconds. Please don't close this window.
-        </p>
-      </div>
+  const renderSlipUploadFooter = () => (
+    <div className="flex gap-3">
+      <button
+        onClick={() => setCurrentStep("payment")}
+        className="flex-1 px-4 py-2 rounded-md transition-colors"
+        style={{ color: siteConfig.theme.primary, backgroundColor: "#f3f4f6" }}
+        onMouseEnter={secondaryButtonHover}
+        onMouseLeave={secondaryButtonLeave}
+      >
+        Back
+      </button>
+      <button
+        onClick={() => setCurrentStep("verify")}
+        disabled={!slipFile}
+        className="flex-1 px-4 py-2 text-white rounded-md transition-colors disabled:opacity-50"
+        style={{ backgroundColor: siteConfig.theme.primary }}
+        onMouseEnter={(e) => !!slipFile && (e.currentTarget.style.backgroundColor = siteConfig.theme.secondary)}
+        onMouseLeave={(e) => !!slipFile && (e.currentTarget.style.backgroundColor = siteConfig.theme.primary)}
+      >
+        Verify Payment
+      </button>
     </div>
   )
 
-  const renderSuccessStep = () => (
+  const renderVerifyBody = () => (
     <div className="p-6 text-center">
-      <div className="mb-6">
-        <div className="mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: "#f0fdf4" }}>
-          <Check className="w-8 h-8" style={{ color: siteConfig.theme.success }} />
-        </div>
-        <p className="text-gray-600">Your payment has been verified and your booking is confirmed.</p>
-      </div>
-
-      {verificationResult && paymentData && (
-        <div className="bg-green-50 rounded-lg p-4 mb-6 text-left">
-          <h3 className="font-semibold text-green-900 mb-3">Booking Details</h3>
-          <div className="space-y-2 text-sm text-green-800">
-            <div className="flex justify-between">
-              <span>Booking ID:</span>
-              <span className="font-mono">{paymentData.bookingId}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Amount Paid:</span>
-              <span>฿{verificationResult.amount.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Payment Time:</span>
-              <span>{new Date(verificationResult.timestamp).toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Customer:</span>
-              <span>{formData.customerName}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Date:</span>
-              <span>{new Date(timeSlot.date).toLocaleDateString()}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Room:</span>
-              <span>{room.room_name}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Time: </span>
-              <span>
-                {startTime} - {endTime}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span>Duration:</span>
-              <span>{totalDuration} minutes</span>
-            </div>
+      {verifyState === "pending" && (
+        <>
+          <div className="mb-6">
+            <Loader2 className="mx-auto w-16 h-16 animate-spin" style={{ color: siteConfig.theme.maintext }} />
+            <h3 className="text-lg font-bold mt-4 mb-2" style={{ color: siteConfig.theme.maintext }}>
+              Verifying Payment
+            </h3>
+            <p style={{ color: siteConfig.theme.secondary }}>Please wait while we verify your payment slip...</p>
           </div>
-        </div>
+          <div className="rounded-lg p-4" style={{ backgroundColor: "#eff6ff" }}>
+            <p className="text-sm" style={{ color: siteConfig.theme.secondary }}>
+              This process usually takes 10-30 seconds. Please don't close this window.
+            </p>
+          </div>
+        </>
       )}
 
-      <div className="space-y-3">
-        <p style={{ color: siteConfig.theme.error }}>Don't forget to capture this screen!!</p>
+      {verifyState === "success" && (
+        <>
+          <div className="mb-6">
+            <div className="mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: "#f0fdf4" }}>
+              <Check className="w-8 h-8" style={{ color: siteConfig.theme.success }} />
+            </div>
+            <p className="text-gray-600">Your payment has been verified and your booking is confirmed.</p>
+          </div>
+
+          {verificationResult && paymentData && (
+            <div className="bg-green-50 rounded-lg p-4 mb-6 text-left">
+              <h3 className="font-semibold text-green-900 mb-3">Booking Details</h3>
+              <div className="space-y-2 text-sm text-green-800">
+                <div className="flex justify-between">
+                  <span>Booking ID:</span>
+                  <span className="font-mono">{paymentData.bookingId}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Amount Paid:</span>
+                  <span>฿{verificationResult.amount.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Payment Time:</span>
+                  <span>{new Date(verificationResult.timestamp).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Customer:</span>
+                  <span>{formData.customerName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Date:</span>
+                  <span>{new Date(timeSlot.date).toLocaleDateString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Room:</span>
+                  <span>{room.room_name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Time: </span>
+                  <span>
+                    {startTime} - {endTime}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Duration:</span>
+                  <span>{formatDuration(totalDuration)}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <p style={{ color: siteConfig.theme.error }}>Don't forget to capture this screen!!</p>
+        </>
+      )}
+
+      {verifyState === "failed" && (
+        <div className="mb-2">
+          <div className="mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: "#fef2f2" }}>
+            <AlertCircle className="w-8 h-8" style={{ color: siteConfig.theme.error }} />
+          </div>
+          <h3 className="text-lg font-bold mb-2" style={{ color: siteConfig.theme.maintext }}>
+            Verification Failed
+          </h3>
+          <p style={{ color: siteConfig.theme.secondary }}>{error || "Payment verification failed"}</p>
+        </div>
+      )}
+    </div>
+  )
+
+  const renderVerifyFooter = () => {
+    if (verifyState === "success") {
+      return (
         <button
           onClick={onClose}
           className="w-full px-4 py-2 text-white rounded-md transition-colors"
@@ -831,23 +879,61 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
         >
           Close
         </button>
-      </div>
-    </div>
-  )
+      )
+    }
+
+    if (verifyState === "failed") {
+      return (
+        <button
+          onClick={handleRetryVerification}
+          className="w-full px-4 py-2 text-white rounded-md transition-colors"
+          style={{ backgroundColor: siteConfig.theme.primary }}
+          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = siteConfig.theme.secondary)}
+          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = siteConfig.theme.primary)}
+        >
+          Try Again
+        </button>
+      )
+    }
+
+    return null
+  }
 
   const stepTitles: Record<Step, string> = {
-    select: "Book Your Karaoke Session",
+    details: "Book Your Karaoke Session",
     confirm: "Confirm Your Booking",
     payment: "Payment via PromptPay",
     "slip-upload": "Upload Payment Slip",
-    verification: "Verifying Payment",
-    success: "Booking Confirmed!",
+    verify:
+      verifyState === "success" ? "Booking Confirmed!" : verifyState === "failed" ? "Verification Failed" : "Verifying Payment",
   }
 
+  const stepBody: Record<Step, () => React.ReactNode> = {
+    details: renderDetailsBody,
+    confirm: renderConfirmBody,
+    payment: renderPaymentBody,
+    "slip-upload": renderSlipUploadBody,
+    verify: renderVerifyBody,
+  }
+
+  const stepFooter: Record<Step, () => React.ReactNode> = {
+    details: renderDetailsFooter,
+    confirm: renderConfirmFooter,
+    payment: renderPaymentFooter,
+    "slip-upload": renderSlipUploadFooter,
+    verify: renderVerifyFooter,
+  }
+
+  const footerContent = stepFooter[currentStep]()
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={currentStep === "select" ? onClose : undefined}>
-      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-6 border-b" style={{ borderColor: "#e5e7eb" }}>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={currentStep === "details" ? onClose : undefined}>
+      <div
+        className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header - stays fixed at the top */}
+        <div className="flex items-center justify-between p-6 border-b flex-shrink-0" style={{ borderColor: "#e5e7eb" }}>
           <div className="flex items-center gap-4">
             <h2 className="text-xl font-bold" style={{ color: siteConfig.theme.maintext }}>
               {stepTitles[currentStep]}
@@ -863,7 +949,7 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
           </div>
           <button
             onClick={onClose}
-            disabled={currentStep === "verification"}
+            disabled={currentStep === "verify" && verifyState === "pending"}
             className="transition-colors disabled:cursor-not-allowed"
             style={{ color: "#9ca3af" }}
             onMouseEnter={(e) => !e.currentTarget.disabled && (e.currentTarget.style.color = "#6b7280")}
@@ -873,8 +959,8 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
           </button>
         </div>
 
-        {/* Progress Indicator */}
-        <div className="px-6 py-3 bg-gray-50 border-b">
+        {/* Progress Indicator - stays fixed under the header */}
+        <div className="px-6 py-3 bg-gray-50 border-b flex-shrink-0">
           <div className="flex items-center justify-between text-xs">
             {STEP_LABELS.map(({ step, label }) => (
               <div
@@ -889,12 +975,15 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
           </div>
         </div>
 
-        {currentStep === "select" && renderSelectStep()}
-        {currentStep === "confirm" && renderConfirmStep()}
-        {currentStep === "payment" && renderPaymentStep()}
-        {currentStep === "slip-upload" && renderSlipUploadStep()}
-        {currentStep === "verification" && renderVerificationStep()}
-        {currentStep === "success" && renderSuccessStep()}
+        {/* Scrollable content - only this area scrolls */}
+        <div className="flex-1 overflow-y-auto min-h-0">{stepBody[currentStep]()}</div>
+
+        {/* Footer - stays fixed at the bottom so the action buttons are never scrolled out of view */}
+        {footerContent && (
+          <div className="p-6 border-t flex-shrink-0 bg-white" style={{ borderColor: "#e5e7eb" }}>
+            {footerContent}
+          </div>
+        )}
       </div>
     </div>
   )

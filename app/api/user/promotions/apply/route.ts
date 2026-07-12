@@ -5,6 +5,9 @@ interface ApplyPromoRequest {
     code: string
     total_price: number
     roomId?: string
+    date?: string
+    time?: string
+    endTime?: string
   }
 }
 
@@ -27,7 +30,7 @@ interface DiscountResponse {
 export async function POST(request: NextRequest) {
   try {
     const body: ApplyPromoRequest = await request.json()
-    const { code, total_price, roomId } = body.data || {}
+    const { code, total_price, roomId, date, time, endTime } = body.data || {}
 
     if (!code || !code.trim()) {
       return NextResponse.json(
@@ -121,12 +124,23 @@ export async function POST(request: NextRequest) {
       code: trimmedCode,
       total_price,
     }
-    
+
     // Include roomId if provided (for room-specific promotions)
     if (roomId) {
       requestData.roomId = roomId
     }
-    
+
+    // Check promotion validity against the date/time being booked, not right now
+    if (date) {
+      requestData.date = date
+    }
+    if (time) {
+      requestData.time = time
+    }
+    if (endTime) {
+      requestData.endTime = endTime
+    }
+
     const response = await fetch(backendUrl, {
       method: "POST",
       headers: {
@@ -164,7 +178,7 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           error: {
-            message: "Promotion code is invalid",
+            message: result.error?.message || "Promotion code is invalid",
           },
         },
         { status: 400 }

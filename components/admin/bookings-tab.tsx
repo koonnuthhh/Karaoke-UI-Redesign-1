@@ -1,20 +1,50 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Calendar, ChevronLeft, ChevronRight, RefreshCw, Eye } from "lucide-react"
+import { Calendar, ChevronLeft, ChevronRight, RefreshCw, Eye, Pencil, X, AlertCircle } from "lucide-react"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
-import type { TimeSlot } from "@/types"
+import type { TimeSlot, Room } from "@/types"
 
 interface BookingsTabProps {
   dataLoading: boolean
   onRefresh: () => void
+  rooms?: Room[]
 }
 
-export function BookingsTab({ dataLoading, onRefresh }: BookingsTabProps) {
+// Treats times before 06:00 as belonging to "the next day" so overnight
+// hours (e.g. open 12:00, close 01:00) compare/add correctly.
+function toComparableDate(time: string): Date {
+  return time < "06:00" ? new Date(`2000-01-02T${time}`) : new Date(`2000-01-01T${time}`)
+}
+
+function addMinutesToTime(time: string, minutes: number): string {
+  const date = toComparableDate(time)
+  date.setMinutes(date.getMinutes() + minutes)
+  const hh = date.getHours().toString().padStart(2, "0")
+  const mm = date.getMinutes().toString().padStart(2, "0")
+  return `${hh}:${mm}`
+}
+
+interface EditFormState {
+  roomId: string
+  customerName: string
+  startTime: string
+  duration: number
+  price: number
+}
+
+export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabProps) {
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split("T")[0])
   const [bookings, setBookings] = useState<TimeSlot[]>([])
   const [loading, setLoading] = useState(false)
   const [selectedBooking, setSelectedBooking] = useState<TimeSlot | null>(null)
+  const [cancelTarget, setCancelTarget] = useState<TimeSlot | null>(null)
+  const [isCancelling, setIsCancelling] = useState(false)
+  const [cancelError, setCancelError] = useState("")
+  const [editTarget, setEditTarget] = useState<TimeSlot | null>(null)
+  const [editForm, setEditForm] = useState<EditFormState | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+  const [editError, setEditError] = useState("")
 
   useEffect(() => {
     fetchBookings(selectedDate)
@@ -40,6 +70,87 @@ export function BookingsTab({ dataLoading, onRefresh }: BookingsTabProps) {
       setBookings([])
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleCancelBooking = async () => {
+    if (!cancelTarget?.id) return
+
+    setIsCancelling(true)
+    setCancelError("")
+    try {
+      const response = await fetch("/api/bookings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          booking_id: cancelTarget.id,
+          booking_status: "cancelled",
+        }),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        setCancelTarget(null)
+        setSelectedBooking(null)
+        fetchBookings(selectedDate)
+      } else {
+        setCancelError(result.message || result.error?.message || "Failed to cancel booking")
+      }
+    } catch (err) {
+      console.error("Failed to cancel booking:", err)
+      setCancelError("Network error. Please try again.")
+    } finally {
+      setIsCancelling(false)
+    }
+  }
+
+  const openEditModal = (booking: TimeSlot) => {
+    setEditError("")
+    setEditTarget(booking)
+    setEditForm({
+      roomId: booking.roomId,
+      customerName: booking.customerName || "",
+      startTime: booking.startTime,
+      duration: booking.duration || 30,
+      price: booking.price || 0,
+    })
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editTarget?.id || !editForm) return
+
+    setIsSaving(true)
+    setEditError("")
+    try {
+      const response = await fetch("/api/bookings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          booking_id: editTarget.id,
+          room_id: editForm.roomId,
+          username: editForm.customerName,
+          start_time: editForm.startTime,
+          end_time: addMinutesToTime(editForm.startTime, editForm.duration),
+          price: editForm.price,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        setEditTarget(null)
+        setEditForm(null)
+        setSelectedBooking(null)
+        fetchBookings(selectedDate)
+      } else {
+        setEditError(result.message || result.error?.message || "Failed to save booking")
+      }
+    } catch (err) {
+      console.error("Failed to save booking:", err)
+      setEditError("Network error. Please try again.")
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -251,13 +362,34 @@ export function BookingsTab({ dataLoading, onRefresh }: BookingsTabProps) {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <button
-                        onClick={() => setSelectedBooking(booking)}
-                        className="text-blue-600 hover:text-blue-900 font-medium flex items-center gap-1"
-                      >
-                        <Eye className="w-4 h-4" />
-                        View
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => setSelectedBooking(booking)}
+                          className="text-blue-600 hover:text-blue-900 font-medium flex items-center gap-1"
+                        >
+                          <Eye className="w-4 h-4" />
+                          View
+                        </button>
+                        <button
+                          onClick={() => openEditModal(booking)}
+                          className="text-indigo-600 hover:text-indigo-900 font-medium flex items-center gap-1"
+                        >
+                          <Pencil className="w-4 h-4" />
+                          Edit
+                        </button>
+                        {booking.status?.toLowerCase() === "pending" && (
+                          <button
+                            onClick={() => {
+                              setCancelError("")
+                              setCancelTarget(booking)
+                            }}
+                            className="text-red-600 hover:text-red-900 font-medium flex items-center gap-1"
+                          >
+                            <X className="w-4 h-4" />
+                            Cancel
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -357,6 +489,159 @@ export function BookingsTab({ dataLoading, onRefresh }: BookingsTabProps) {
                 className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium"
               >
                 Close
+              </button>
+              <button
+                onClick={() => openEditModal(selectedBooking)}
+                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium"
+              >
+                Edit
+              </button>
+              {selectedBooking.status?.toLowerCase() === "pending" && (
+                <button
+                  onClick={() => {
+                    setCancelError("")
+                    setCancelTarget(selectedBooking)
+                  }}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-medium"
+                >
+                  Cancel Booking
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Confirmation Modal */}
+      {cancelTarget && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <AlertCircle className="w-6 h-6 text-red-600" />
+              <h3 className="text-lg font-bold text-gray-900">Cancel Booking</h3>
+            </div>
+            <p className="text-gray-600 mb-2">
+              Are you sure you want to cancel this pending booking? This action cannot be undone.
+            </p>
+            <p className="text-sm text-gray-500">
+              {cancelTarget.roomName} &middot; {formatTime(cancelTarget.startTime)} - {formatTime(cancelTarget.endTime)} &middot; {cancelTarget.customerName || "-"}
+            </p>
+            {cancelError && <p className="text-red-600 mt-3 text-sm">{cancelError}</p>}
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setCancelTarget(null)
+                  setCancelError("")
+                }}
+                disabled={isCancelling}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Go Back
+              </button>
+              <button
+                onClick={handleCancelBooking}
+                disabled={isCancelling}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+              >
+                {isCancelling ? "Cancelling..." : "Cancel Booking"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Booking Modal */}
+      {editTarget && editForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">Edit Booking</h3>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Room</label>
+                <select
+                  value={editForm.roomId}
+                  onChange={(e) => setEditForm({ ...editForm, roomId: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  {rooms.map((room) => (
+                    <option key={room.room_id} value={room.room_id}>
+                      {room.room_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name</label>
+                <input
+                  type="text"
+                  value={editForm.customerName}
+                  onChange={(e) => setEditForm({ ...editForm, customerName: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
+                  <input
+                    type="time"
+                    value={editForm.startTime}
+                    onChange={(e) => setEditForm({ ...editForm, startTime: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Duration (minutes)</label>
+                  <input
+                    type="number"
+                    min={30}
+                    step={30}
+                    value={editForm.duration}
+                    onChange={(e) => setEditForm({ ...editForm, duration: parseInt(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <p className="text-xs text-gray-500">
+                End Time: {addMinutesToTime(editForm.startTime, editForm.duration)}
+              </p>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Price (฿)</label>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={editForm.price}
+                  onChange={(e) => setEditForm({ ...editForm, price: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+            </div>
+
+            {editError && <p className="text-red-600 mt-3 text-sm">{editError}</p>}
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setEditTarget(null)
+                  setEditForm(null)
+                  setEditError("")
+                }}
+                disabled={isSaving}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={isSaving}
+                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {isSaving ? "Saving..." : "Save Changes"}
               </button>
             </div>
           </div>

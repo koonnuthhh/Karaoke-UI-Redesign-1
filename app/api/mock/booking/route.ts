@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
-import { readCollection, writeCollection, genId, ok } from "@/lib/mockDb"
+import { readCollection, writeCollection, genId, ok, fail } from "@/lib/mockDb"
+import { hasOverlappingBooking } from "@/lib/booking-overlap"
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
   const input = body.data || body
+
+  if (hasOverlappingBooking(input.room_id, input.date, input.start_time, input.end_time)) {
+    return NextResponse.json(fail("Booking time overlaps with an existing booking"), { status: 400 })
+  }
 
   const bookings = readCollection<any>("bookings")
   const now = new Date().toISOString()

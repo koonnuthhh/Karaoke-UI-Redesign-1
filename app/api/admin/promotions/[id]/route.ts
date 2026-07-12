@@ -96,6 +96,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       is_active: promotionData.is_active !== undefined ? promotionData.is_active : promotionData.isActive,
       is_room_specific: promotionData.is_room_specific || false,
       applicable_room_ids: promotionData.applicable_room_ids || [],
+      applicable_days: promotionData.applicable_days || [],
     }
 
     // Remove undefined fields

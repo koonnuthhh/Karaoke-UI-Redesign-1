@@ -30,16 +30,23 @@
     "discount_value": 100,
     "buy_x_hour": null,
     "get_y_hour": null,
-    "start_date": "2026-01-01",
-    "end_date": "2026-12-31",
+    "start_date": "2026-07-10T00:00:00",
+    "end_date": "2026-12-31T23:59:59",
     "start_time": "12:00:00",
     "end_time": "01:00:00",
     "is_active": true,
     "is_room_specific": true,
-    "applicable_room_ids": ["room-002", "room-003"],
+    "applicable_room_ids": [
+      "room-002",
+      "room-003"
+    ],
+    "applicable_days": [5, 6],
     "max_usage": 50,
     "used_count": 5,
-    "created_by": "demo-admin-001"
+    "created_by": "demo-admin-001",
+    "promotion_id": "promo-002",
+    "admin_id": "demo-admin-001",
+    "requesting_admin_id": "demo-admin-001"
   },
   {
     "id": "promo-003",

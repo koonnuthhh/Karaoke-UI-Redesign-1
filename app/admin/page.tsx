@@ -172,6 +172,7 @@ export default function AdminPanel() {
           <BookingsTab
             dataLoading={dataLoading}
             onRefresh={fetchAllData}
+            rooms={rooms}
           />
         )}
       </main>
