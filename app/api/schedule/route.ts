@@ -29,6 +29,25 @@ function getBookingRange(booking: any) {
   return { start, end }
 }
 
+// A room's blackout window is a temporary, scheduled unavailability separate from
+// is_active: a date range plus a DAILY recurring time window (same convention as
+// Promotion's start_time/end_time) during which the room can't be booked.
+function isRoomBlackedOut(room: Room, date: string, slotStart: number, slotEnd: number): boolean {
+  const { blackout_start_date, blackout_end_date, blackout_start_time, blackout_end_time } = room as any
+
+  if (!blackout_start_date || !blackout_end_date) return false
+  if (date < blackout_start_date || date > blackout_end_date) return false
+
+  // No time window set means the room is blacked out for the whole day.
+  if (!blackout_start_time || !blackout_end_time) return true
+
+  const bStart = timeToMinutes(blackout_start_time.slice(0, 5))
+  let bEnd = timeToMinutes(blackout_end_time.slice(0, 5))
+  if (bEnd <= bStart) bEnd += 1440 // Overnight blackout window
+
+  return slotStart < bEnd && slotEnd > bStart
+}
+
 const APIKEY = ApiKeyConfig.API_KEY;
 
 export async function GET(request: NextRequest) {
@@ -121,7 +140,7 @@ export async function GET(request: NextRequest) {
           return bookingStart < slotEnd && bookingEnd > slotStart;
         })
 
-        const status = realBooking?.status ?? "available"
+        const status = realBooking?.status ?? (isRoomBlackedOut(room, date, slotStart, slotEnd) ? "closed" : "available")
 
         return {
           id: realBooking?.booking_id || `${room.room_id}-${date}-${time}`,
@@ -137,6 +156,10 @@ export async function GET(request: NextRequest) {
           customerID: realBooking?.user_id,
           price: realBooking?.price ?? room.price_per_half_hour,
           duration: siteConfig.schedule.slotDuration,
+          created_at: realBooking?.created_at,
+          updated_at: realBooking?.updated_at,
+          bookedByAdminId: realBooking?.booked_by_admin_id || undefined,
+          bookedByAdminName: realBooking?.booked_by_admin_name || undefined,
         } as TimeSlot
       }),
     )

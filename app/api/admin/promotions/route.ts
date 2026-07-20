@@ -72,6 +72,8 @@ export async function GET(req: NextRequest) {
         is_active: promo.is_active !== undefined ? promo.is_active : true,
         maxUses: promo.max_usage || 0,
         max_usage: promo.max_usage,
+        used_count: promo.usage_count ?? promo.used_count ?? 0,
+        usedCount: promo.usage_count ?? promo.used_count ?? 0,
         is_room_specific: promo.is_room_specific || false,
         applicable_room_ids: promo.applicable_room_ids || [],
         applicable_days: promo.applicable_days || [],

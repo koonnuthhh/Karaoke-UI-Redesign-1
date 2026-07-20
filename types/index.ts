@@ -5,6 +5,18 @@ export interface Room {
   is_active: boolean
   features: string[]
   color: string
+  // Controls column order in the schedule grid (ascending); rooms with no
+  // value (or equal values) fall back to alphabetical by room_name.
+  display_order?: number | null
+  // Temporary scheduled unavailability (e.g. maintenance), separate from is_active.
+  // blackout_start_time/end_time is a DAILY recurring window (like Promotion's
+  // start_time/end_time), applied on every date within the start/end date range.
+  // null (not undefined) is used to explicitly clear a field - JSON.stringify drops
+  // undefined keys entirely, which would leave the old value untouched server-side.
+  blackout_start_date?: string | null
+  blackout_end_date?: string | null
+  blackout_start_time?: string | null
+  blackout_end_time?: string | null
 }
 
 export interface TimeSlot {
@@ -24,6 +36,9 @@ export interface TimeSlot {
   duration: number // in minutes
   created_at?: string
   updated_at?: string
+  // Set when an admin created this booking directly (not a customer self-booking)
+  bookedByAdminId?: string
+  bookedByAdminName?: string
 }
 
 export interface BookingRequest {
@@ -37,6 +52,9 @@ export interface BookingRequest {
   specialRequests?: string
   totalPrice: number
   duration: number // total duration in minutes
+  // Set when an admin created this booking directly (not a customer self-booking)
+  bookedByAdminId?: string
+  bookedByAdminName?: string
 }
 
 

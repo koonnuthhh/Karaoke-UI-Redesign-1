@@ -3,6 +3,10 @@
 import { useState, useEffect } from "react"
 import { Calendar, ChevronLeft, ChevronRight, RefreshCw, Eye, Pencil, X, AlertCircle } from "lucide-react"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
+import { PromoInput } from "@/components/promo-input"
+import { calculatePrice } from "@/lib/time-utils"
+import { getAdminUser } from "@/lib/admin-service"
+import { TimeSelect } from "@/components/ui/time-select"
 import type { TimeSlot, Room } from "@/types"
 
 interface BookingsTabProps {
@@ -30,7 +34,12 @@ interface EditFormState {
   customerName: string
   startTime: string
   duration: number
-  price: number
+}
+
+interface DiscountState {
+  original_price: number
+  discount_amount: number
+  final_price: number
 }
 
 export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabProps) {
@@ -45,10 +54,61 @@ export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabP
   const [editForm, setEditForm] = useState<EditFormState | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [editError, setEditError] = useState("")
+  const [customPrice, setCustomPrice] = useState<number | null>(null)
+  const [discount, setDiscount] = useState<DiscountState | null>(null)
+  const [appliedPromoCode, setAppliedPromoCode] = useState<string | null>(null)
+  const [appliedPromotionId, setAppliedPromotionId] = useState<string | null>(null)
+  const currentUser = getAdminUser()
 
   useEffect(() => {
     fetchBookings(selectedDate)
   }, [selectedDate])
+
+  // Live price calculation for the booking currently being edited, same
+  // formula (`calculatePrice`) and promo-reapply pattern as AdminBookingModal
+  // uses when creating a booking.
+  const editRoom = editForm ? rooms.find((r) => r.room_id === editForm.roomId) : undefined
+  const editEndTime = editForm ? addMinutesToTime(editForm.startTime, editForm.duration) : ""
+  const editCalculatedPrice = editForm && editRoom ? calculatePrice(editRoom.price_per_half_hour, editForm.duration) : 0
+  const editPriceBeforeDiscount = customPrice !== null && customPrice >= 0 ? customPrice : editCalculatedPrice
+  const editFinalPrice = discount ? discount.final_price : editPriceBeforeDiscount
+
+  // Automatically recalculate the applied promo's discount when the price,
+  // room, or time being edited changes.
+  useEffect(() => {
+    if (!editForm || !appliedPromoCode) return
+    const priceToUse = customPrice !== null && customPrice >= 0 ? customPrice : editCalculatedPrice
+    const reapplyPromo = async () => {
+      try {
+        const response = await fetch("/api/user/promotions/apply", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            data: {
+              code: appliedPromoCode,
+              total_price: priceToUse,
+              roomId: editForm.roomId,
+              date: editTarget?.date,
+              time: editForm.startTime,
+              endTime: editEndTime,
+            },
+          }),
+        })
+        const result = await response.json()
+        if (result.success && result.data) {
+          setDiscount({
+            original_price: priceToUse,
+            discount_amount: result.data.discount_amount,
+            final_price: result.data.final_price,
+          })
+        }
+      } catch (err) {
+        // Silently fail - keep existing discount
+      }
+    }
+    reapplyPromo()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customPrice, appliedPromoCode, editCalculatedPrice, editForm?.roomId, editForm?.startTime, editEndTime])
 
   const fetchBookings = async (date: string) => {
     setLoading(true)
@@ -113,8 +173,21 @@ export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabP
       customerName: booking.customerName || "",
       startTime: booking.startTime,
       duration: booking.duration || 30,
-      price: booking.price || 0,
     })
+    setCustomPrice(null)
+    setDiscount(null)
+    setAppliedPromoCode(null)
+    setAppliedPromotionId(null)
+  }
+
+  const closeEditModal = () => {
+    setEditTarget(null)
+    setEditForm(null)
+    setEditError("")
+    setCustomPrice(null)
+    setDiscount(null)
+    setAppliedPromoCode(null)
+    setAppliedPromotionId(null)
   }
 
   const handleSaveEdit = async () => {
@@ -132,15 +205,16 @@ export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabP
           username: editForm.customerName,
           start_time: editForm.startTime,
           end_time: addMinutesToTime(editForm.startTime, editForm.duration),
-          price: editForm.price,
+          price: editFinalPrice,
+          ...(appliedPromotionId && { promotion_id: appliedPromotionId }),
+          ...(currentUser && { booked_by_admin_id: currentUser.admin_id, booked_by_admin_name: currentUser.username }),
         }),
       })
 
       const result = await response.json()
 
       if (result.success) {
-        setEditTarget(null)
-        setEditForm(null)
+        closeEditModal()
         setSelectedBooking(null)
         fetchBookings(selectedDate)
       } else {
@@ -327,6 +401,9 @@ export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabP
                     Status
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Created At
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Action
                   </th>
                 </tr>
@@ -360,6 +437,9 @@ export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabP
                       >
                         {booking.status?.charAt(0).toUpperCase() + booking.status?.slice(1).toLowerCase()}
                       </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                      {formatDateTime(booking.created_at)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       <div className="flex items-center gap-3">
@@ -429,6 +509,15 @@ export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabP
                   {selectedBooking.customerPhone || "-"}
                 </p>
               </div>
+
+              {selectedBooking.bookedByAdminName && (
+                <div>
+                  <p className="text-sm text-gray-500">Booked By (Admin)</p>
+                  <p className="text-base font-semibold text-gray-900">
+                    {selectedBooking.bookedByAdminName}
+                  </p>
+                </div>
+              )}
 
               <div>
                 <p className="text-sm text-gray-500">Date</p>
@@ -585,11 +674,11 @@ export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabP
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
-                  <input
-                    type="time"
+                  <TimeSelect
                     value={editForm.startTime}
-                    onChange={(e) => setEditForm({ ...editForm, startTime: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    onChange={(time) => setEditForm({ ...editForm, startTime: time })}
+                    className="w-full"
+                    selectClassName="flex-1 min-w-0 px-2 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
                 <div>
@@ -606,31 +695,72 @@ export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabP
               </div>
 
               <p className="text-xs text-gray-500">
-                End Time: {addMinutesToTime(editForm.startTime, editForm.duration)}
+                End Time: {editEndTime}
               </p>
 
+              {/* Booking Summary — mirrors AdminBookingModal's live price calculation */}
+              <div className="bg-indigo-50 rounded-lg p-3 text-sm">
+                <p><span className="font-medium">Original Price:</span> ฿{editCalculatedPrice.toFixed(2)}</p>
+                {customPrice !== null && (
+                  <p className="text-blue-600"><span className="font-medium">Custom Price:</span> ฿{customPrice.toFixed(2)}</p>
+                )}
+                {discount && (
+                  <div className="mt-2 pt-2 border-t border-indigo-200">
+                    <p className="text-green-600"><span className="font-medium">Discount:</span> -฿{discount.discount_amount.toFixed(2)}</p>
+                    <p className="font-bold text-base text-green-600"><span className="font-medium">After Discount:</span> ฿{discount.final_price.toFixed(2)}</p>
+                  </div>
+                )}
+              </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Price (฿)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Price (Leave blank to use calculated: ฿{editCalculatedPrice.toFixed(2)})
+                  {appliedPromoCode && <span className="text-green-600 text-xs ml-2">(Promo will auto-update)</span>}
+                </label>
                 <input
                   type="number"
                   min={0}
                   step={0.01}
-                  value={editForm.price}
-                  onChange={(e) => setEditForm({ ...editForm, price: parseFloat(e.target.value) || 0 })}
+                  value={customPrice !== null ? customPrice : ""}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    setCustomPrice(value === "" ? null : parseFloat(value) || 0)
+                  }}
+                  placeholder={editCalculatedPrice.toFixed(2)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
+
+              <PromoInput
+                cartTotal={editPriceBeforeDiscount}
+                roomId={editForm.roomId}
+                bookingDate={editTarget.date}
+                bookingTime={editForm.startTime}
+                bookingEndTime={editEndTime}
+                externalDiscount={discount}
+                onPromoApplied={(newFinalPrice, discountAmount, promoCode, promotionId) => {
+                  if (promoCode === "") {
+                    setDiscount(null)
+                    setAppliedPromoCode(null)
+                    setAppliedPromotionId(null)
+                  } else {
+                    setDiscount({
+                      original_price: editPriceBeforeDiscount,
+                      discount_amount: discountAmount,
+                      final_price: newFinalPrice,
+                    })
+                    setAppliedPromoCode(promoCode)
+                    setAppliedPromotionId(promotionId || null)
+                  }
+                }}
+              />
             </div>
 
             {editError && <p className="text-red-600 mt-3 text-sm">{editError}</p>}
 
             <div className="flex gap-3 mt-6">
               <button
-                onClick={() => {
-                  setEditTarget(null)
-                  setEditForm(null)
-                  setEditError("")
-                }}
+                onClick={closeEditModal}
                 disabled={isSaving}
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50"
               >
@@ -641,7 +771,7 @@ export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabP
                 disabled={isSaving}
                 className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
               >
-                {isSaving ? "Saving..." : "Save Changes"}
+                {isSaving ? "Saving..." : `Save Changes - ฿${editFinalPrice.toFixed(2)}`}
               </button>
             </div>
           </div>

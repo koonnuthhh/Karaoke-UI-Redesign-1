@@ -6,9 +6,46 @@ import { siteConfig } from "../config/site-config"
 import type { TimeSlot, Room, ScheduleData, BookingRequest } from "../types"
 import { calculatePrice, formatDuration, isTimeSlotAvailable } from "../lib/time-utils"
 import { LoadingSpinner } from "../components/ui/loading-spinner"
+import { TimeSelect } from "../components/ui/time-select"
 import { AlertModal } from "./AlertModal"
 import { PromoInput } from "./promo-input"
 import { getAdminUser } from "../lib/admin-service"
+
+// Treats times before 06:00 as belonging to "the next day" so overnight
+// hours (e.g. open 12:00, close 01:00) compare/add correctly.
+function toComparableDate(time: string): Date {
+    return time < "06:00" ? new Date(`2000-01-02T${time}`) : new Date(`2000-01-01T${time}`)
+}
+
+function addMinutesToTime(time: string, minutes: number): string {
+    const date = toComparableDate(time)
+    date.setMinutes(date.getMinutes() + minutes)
+    const hh = date.getHours().toString().padStart(2, "0")
+    const mm = date.getMinutes().toString().padStart(2, "0")
+    return `${hh}:${mm}`
+}
+
+function minutesBetween(start: string, end: string): number {
+    let endDate = toComparableDate(end)
+    const startDate = toComparableDate(start)
+    if (endDate <= startDate) endDate = new Date(endDate.getTime() + 24 * 60 * 60 * 1000)
+    return (endDate.getTime() - startDate.getTime()) / (1000 * 60)
+}
+
+function formatDateTime(dateTime: string | undefined) {
+    if (!dateTime) return "-"
+    const date = new Date(dateTime)
+    // Add 7 hours to convert from UTC to Thai time (UTC+7)
+    date.setHours(date.getHours() + 7)
+    return date.toLocaleString("th-TH", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+    })
+}
 
 interface AdminBookingModalProps {
     isOpen: boolean
@@ -36,11 +73,123 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
     const [showConfirmCancel, setShowConfirmCancel] = useState(false)
     const currentUser = getAdminUser()
     const isModulator = currentUser?.role === "modulator"
-    
+
     const isManageableSlot = timeSlot.status === "booked" || timeSlot.status === "pending"
     const bookedSlot = isManageableSlot
         ? scheduleData.bookings.find(b => b.id === timeSlot.id)
         : null
+
+    const [isEditing, setIsEditing] = useState(false)
+    const [editForm, setEditForm] = useState<{ roomId: string; customerName: string; startTime: string; duration: number } | null>(null)
+    const [editCustomPrice, setEditCustomPrice] = useState<number | null>(null)
+    const [editDiscount, setEditDiscount] = useState<{ original_price: number; discount_amount: number; final_price: number } | null>(null)
+    const [editAppliedPromoCode, setEditAppliedPromoCode] = useState<string | null>(null)
+    const [editAppliedPromotionId, setEditAppliedPromotionId] = useState<string | null>(null)
+    const [isSaving, setIsSaving] = useState(false)
+    const [editError, setEditError] = useState("")
+
+    const editRoom = editForm ? scheduleData.rooms.find(r => r.room_id === editForm.roomId) : undefined
+    const editEndTime = editForm ? addMinutesToTime(editForm.startTime, editForm.duration) : ""
+    const editCalculatedPrice = editForm && editRoom ? calculatePrice(editRoom.price_per_half_hour, editForm.duration) : 0
+    const editPriceBeforeDiscount = editCustomPrice !== null && editCustomPrice >= 0 ? editCustomPrice : editCalculatedPrice
+    const editFinalPrice = editDiscount ? editDiscount.final_price : editPriceBeforeDiscount
+
+    // Automatically recalculate the applied promo's discount when the price, room, or time being edited changes.
+    useEffect(() => {
+        if (!editForm || !editAppliedPromoCode) return
+        const priceToUse = editCustomPrice !== null && editCustomPrice >= 0 ? editCustomPrice : editCalculatedPrice
+        const reapplyPromo = async () => {
+            try {
+                const response = await fetch("/api/user/promotions/apply", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        data: {
+                            code: editAppliedPromoCode,
+                            total_price: priceToUse,
+                            roomId: editForm.roomId,
+                            date: timeSlot.date,
+                            time: editForm.startTime,
+                            endTime: editEndTime,
+                        },
+                    }),
+                })
+                const result = await response.json()
+                if (result.success && result.data) {
+                    setEditDiscount({
+                        original_price: priceToUse,
+                        discount_amount: result.data.discount_amount,
+                        final_price: result.data.final_price,
+                    })
+                }
+            } catch (err) {
+                // Silently fail - keep existing discount
+            }
+        }
+        reapplyPromo()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [editCustomPrice, editAppliedPromoCode, editCalculatedPrice, editForm?.roomId, editForm?.startTime, editEndTime])
+
+    const openEditMode = () => {
+        if (!bookedSlot) return
+        setEditError("")
+        const start = (bookedSlot.bookingStart || timeSlot.bookingStart || timeSlot.startTime).slice(0, 5)
+        const end = (bookedSlot.bookingEnd || timeSlot.bookingEnd || addMinutesToTime(start, 30)).slice(0, 5)
+        setEditForm({
+            roomId: bookedSlot.roomId || room.room_id,
+            customerName: bookedSlot.customerName || "",
+            startTime: start,
+            duration: minutesBetween(start, end),
+        })
+        setEditCustomPrice(null)
+        setEditDiscount(null)
+        setEditAppliedPromoCode(null)
+        setEditAppliedPromotionId(null)
+        setIsEditing(true)
+    }
+
+    const closeEditMode = () => {
+        setIsEditing(false)
+        setEditForm(null)
+        setEditError("")
+        setEditCustomPrice(null)
+        setEditDiscount(null)
+        setEditAppliedPromoCode(null)
+        setEditAppliedPromotionId(null)
+    }
+
+    const handleSaveEdit = async () => {
+        if (!timeSlot.id || !editForm) return
+        setIsSaving(true)
+        setEditError("")
+        try {
+            const response = await fetch("/api/bookings", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json", "credential": adminCredential ? adminCredential : "" },
+                body: JSON.stringify({
+                    booking_id: timeSlot.id,
+                    room_id: editForm.roomId,
+                    username: editForm.customerName,
+                    start_time: editForm.startTime,
+                    end_time: editEndTime,
+                    price: editFinalPrice,
+                    ...(editAppliedPromotionId && { promotion_id: editAppliedPromotionId }),
+                    ...(currentUser && { booked_by_admin_id: currentUser.admin_id, booked_by_admin_name: currentUser.username }),
+                }),
+            })
+            const result = await response.json()
+            if (result.success) {
+                closeEditMode()
+                onClose()
+            } else {
+                setEditError(result.message || result.error?.message || "Failed to save booking")
+            }
+        } catch (err) {
+            setEditError("Network error. Please try again.")
+        } finally {
+            setIsSaving(false)
+        }
+    }
 
 
     // same available slots logic as BookingModal
@@ -114,8 +263,10 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
             setDiscount(null)
             setAppliedPromoCode(null)
             setAppliedPromotionId(null)
+            closeEditMode()
         }
-    }, [isOpen]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen, timeSlot.id]);
 
     const totalDuration = startTime && endTime
         ? (() => {
@@ -189,6 +340,7 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                 totalPrice: finalPrice,
                 duration: totalDuration,
                 ...formData,
+                ...(currentUser && { bookedByAdminId: currentUser.admin_id, bookedByAdminName: currentUser.username }),
             }
             const createRes = await fetch("/api/bookings", {
                 method: "POST",
@@ -276,15 +428,151 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                 </div>
 
                 <div className="p-6">
-                    {isManageableSlot ? (
+                    {isManageableSlot && isEditing && editForm ? (
+                        <>
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Room</label>
+                                <select
+                                    value={editForm.roomId}
+                                    onChange={(e) => setEditForm({ ...editForm, roomId: e.target.value })}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                >
+                                    {scheduleData.rooms.map((r) => (
+                                        <option key={r.room_id} value={r.room_id}>{r.room_name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name</label>
+                                <input
+                                    type="text"
+                                    value={editForm.customerName}
+                                    onChange={(e) => setEditForm({ ...editForm, customerName: e.target.value })}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4 mb-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
+                                    <TimeSelect
+                                        value={editForm.startTime}
+                                        onChange={(time) => setEditForm({ ...editForm, startTime: time })}
+                                        className="w-full"
+                                        selectClassName="flex-1 min-w-0 px-2 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Duration (minutes)</label>
+                                    <input
+                                        type="number"
+                                        min={30}
+                                        step={30}
+                                        value={editForm.duration}
+                                        onChange={(e) => setEditForm({ ...editForm, duration: parseInt(e.target.value) || 0 })}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                    />
+                                </div>
+                            </div>
+                            <p className="text-xs text-gray-500 -mt-2 mb-4">End Time: {editEndTime}</p>
+
+                            <div className="bg-purple-50 rounded-lg p-4 mb-6">
+                                <h3 className="font-semibold text-purple-900 mb-2">Booking Summary</h3>
+                                <p><span className="font-medium">Original Price:</span> ฿{editCalculatedPrice.toFixed(2)}</p>
+                                {editCustomPrice !== null && (
+                                    <p className="text-blue-600"><span className="font-medium">Custom Price:</span> ฿{editCustomPrice.toFixed(2)}</p>
+                                )}
+                                {editDiscount && (
+                                    <div className="mt-2 pt-2 border-t border-purple-200">
+                                        <p className="text-green-600"><span className="font-medium">Discount:</span> -฿{editDiscount.discount_amount.toFixed(2)}</p>
+                                        <p className="font-bold text-lg text-green-600"><span className="font-medium">After Discount:</span> ฿{editDiscount.final_price.toFixed(2)}</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Price (Leave blank to use calculated: ฿{editCalculatedPrice.toFixed(2)})
+                                    {editAppliedPromoCode && <span className="text-green-600 text-xs ml-2">(Promo will auto-update)</span>}
+                                </label>
+                                <input
+                                    type="number"
+                                    min={0}
+                                    step={0.01}
+                                    value={editCustomPrice !== null ? editCustomPrice : ""}
+                                    onChange={(e) => {
+                                        const value = e.target.value
+                                        setEditCustomPrice(value === "" ? null : parseFloat(value) || 0)
+                                    }}
+                                    placeholder={editCalculatedPrice.toFixed(2)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                                />
+                            </div>
+
+                            <PromoInput
+                                cartTotal={editPriceBeforeDiscount}
+                                roomId={editForm.roomId}
+                                bookingDate={timeSlot.date}
+                                bookingTime={editForm.startTime}
+                                bookingEndTime={editEndTime}
+                                externalDiscount={editDiscount}
+                                onPromoApplied={(finalPrice, discountAmount, promoCode, promotionId) => {
+                                    if (promoCode === "") {
+                                        setEditDiscount(null)
+                                        setEditAppliedPromoCode(null)
+                                        setEditAppliedPromotionId(null)
+                                    } else {
+                                        setEditDiscount({
+                                            original_price: editPriceBeforeDiscount,
+                                            discount_amount: discountAmount,
+                                            final_price: finalPrice
+                                        })
+                                        setEditAppliedPromoCode(promoCode)
+                                        setEditAppliedPromotionId(promotionId || null)
+                                    }
+                                }}
+                            />
+
+                            {editError && <p className="text-red-600 mt-3">{editError}</p>}
+
+                            <div className="mt-4 flex gap-3">
+                                <button
+                                    onClick={closeEditMode}
+                                    disabled={isSaving}
+                                    className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleSaveEdit}
+                                    disabled={isSaving}
+                                    className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50"
+                                >
+                                    {isSaving ? <LoadingSpinner size="sm" /> : `Save Changes - ฿${editFinalPrice.toFixed(2)}`}
+                                </button>
+                            </div>
+                        </>
+                    ) : isManageableSlot ? (
                         <>
                             <p><strong>Customer:</strong> {bookedSlot?.customerName ?? timeSlot.customerName ?? "Unknown"}</p>
                             <p><strong>Phone:</strong> {bookedSlot?.customerPhone ?? timeSlot.customerPhone ?? "Not provided"}</p>
                             <p><strong>Time:</strong> {timeSlot.bookingStart} - {timeSlot.bookingEnd}</p>
+                            <p><strong>Created At:</strong> {formatDateTime(bookedSlot?.created_at)}</p>
+                            {bookedSlot?.bookedByAdminName && (
+                                <p><strong>Booked By (Admin):</strong> {bookedSlot.bookedByAdminName}</p>
+                            )}
                             {timeSlot.status === "pending" && (
                                 <p><strong>Status:</strong> <span className="text-yellow-600 font-medium">Pending</span></p>
                             )}
                             <div className="mt-4 flex gap-3">
+                                <button
+                                    onClick={openEditMode}
+                                    className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50"
+                                    disabled={isSubmitting}
+                                >
+                                    Edit Booking
+                                </button>
                                 <button
                                     onClick={handleCancelBooking}
                                     className="flex-1 px-4 py-2 text-white rounded-md hover:bg-red-700 disabled:opacity-50"

@@ -23,6 +23,8 @@ export async function POST(req: NextRequest) {
     end_time: input.end_time,
     status: input.status || "pending",
     price: input.price,
+    booked_by_admin_id: input.booked_by_admin_id || null,
+    booked_by_admin_name: input.booked_by_admin_name || null,
     created_at: now,
     updated_at: now,
   }

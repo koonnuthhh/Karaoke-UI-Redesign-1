@@ -73,7 +73,12 @@ export function formatDuration(minutes: number): string {
 }
 
 export function isTimeSlotAvailable(timeSlot: string, roomId: string, bookings: TimeSlot[]): boolean {
-  return !bookings.some((booking) => booking.roomId === roomId && booking.startTime === timeSlot && booking.status == "booked")
+  return !bookings.some(
+    (booking) =>
+      booking.roomId === roomId &&
+      booking.startTime === timeSlot &&
+      (booking.status === "booked" || booking.status === "closed"),
+  )
 }
 
 export function getConsecutiveSlots(selectedSlots: string[], allSlots: string[]): boolean {

@@ -11,7 +11,8 @@
     ],
     "color": "rgb(43, 170, 243)",
     "admin_id": "demo-admin-001",
-    "requesting_admin_id": "demo-admin-001"
+    "requesting_admin_id": "demo-admin-001",
+    "display_order": 1
   },
   {
     "room_id": "room-002",
@@ -24,7 +25,8 @@
       "Sofa",
       "Disco Lights"
     ],
-    "color": "rgba(88, 233, 31, 1)"
+    "color": "rgba(88, 233, 31, 1)",
+    "display_order": 2
   },
   {
     "room_id": "room-003",
@@ -38,7 +40,8 @@
       "Disco Lights",
       "Smoke Machine"
     ],
-    "color": "rgba(255, 129, 129, 1)"
+    "color": "rgba(255, 129, 129, 1)",
+    "display_order": 3
   },
   {
     "room_id": "room-004",
@@ -51,6 +54,7 @@
       "Private Bar",
       "Disco Lights"
     ],
-    "color": "rgb(150,150,150)"
+    "color": "rgb(150,150,150)",
+    "display_order": 4
   }
 ]

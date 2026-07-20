@@ -59,7 +59,9 @@ export async function POST(request: NextRequest) {
           end_time: booking.timeSlots[1],
           status: "pending",
           date: booking.date,
-          price: booking.totalPrice
+          price: booking.totalPrice,
+          ...(booking.bookedByAdminId && { booked_by_admin_id: booking.bookedByAdminId }),
+          ...(booking.bookedByAdminName && { booked_by_admin_name: booking.bookedByAdminName }),
         }
       })
     });

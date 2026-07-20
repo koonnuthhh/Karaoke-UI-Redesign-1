@@ -9,6 +9,18 @@ import { AdminBookingModal } from "../components/admin-booking-modal"
 import { AlertModal } from "./AlertModal"
 import { isTimeSlotPast } from "../lib/time-utils"
 import { getAdminUser } from "../lib/admin-service"
+import type { Room } from "../types"
+
+// Ascending by display_order; rooms with no order set sort after ordered ones,
+// falling back to alphabetical by name so ties (or all-unset) stay stable.
+function compareRoomOrder(a: Room, b: Room): number {
+  const aOrder = a.display_order ?? null
+  const bOrder = b.display_order ?? null
+  if (aOrder !== null && bOrder !== null && aOrder !== bOrder) return aOrder - bOrder
+  if (aOrder !== null && bOrder === null) return -1
+  if (aOrder === null && bOrder !== null) return 1
+  return a.room_name.localeCompare(b.room_name)
+}
 
 // Corrected interface for the ScheduleTable props
 interface ScheduleTableProps {
@@ -46,7 +58,7 @@ function SlotCell({
   function getSlotStyles(slot: TimeSlot): string {
     const status = slot.status
     const isPast = isTimeSlotPast(slot.startTime, scheduleDate)
-    const baseStyles = "p-1.5 sm:p-2 text-center text-xs sm:text-sm border rounded cursor-pointer transition-colors duration-200"
+    const baseStyles = "p-1 sm:p-2 text-center text-[11px] sm:text-sm border rounded cursor-pointer transition-colors duration-200"
 
     if (isDisabledForBooking) {
       return `${baseStyles} ${siteConfig.theme.maintext} border-gray-200 cursor-not-allowed`
@@ -117,12 +129,12 @@ function SlotCell({
 
   return (
     <td
-      className="px-2 py-3 text-center"
+      className="px-1 sm:px-4 py-1.5 sm:py-3 text-center"
       onMouseEnter={() => setIsHover(true)}
       onMouseLeave={() => setIsHover(false)}
     >
       <div
-        className={`${getSlotStyles(slot)} flex items-center justify-center`}
+        className={`${getSlotStyles(slot)} flex items-center justify-center w-full h-full min-h-[2.75rem] sm:min-h-[3.25rem]`}
         style={{ background: getSlotColor(slot, isHover) }}
         // Added adminCredential check for clickability of booked and pending slots
         onClick={() => {
@@ -152,49 +164,52 @@ function SlotCell({
         {/* Check if slot is greyed out (unavailable) */}
         {(() => {
           if (isDisabledForBooking) {
-            return <div className="font-medium truncate max-w-[5rem]">Closed</div>
+            return <div className="font-medium truncate w-full">Closed</div>
           }
 
           const isPast = isTimeSlotPast(slot.startTime, scheduleDate)
           const isUnavailable = (isPast || slot.status === "closed" ) && !adminCredential &&  slot.status !== "booked"
 
           if (isUnavailable) {
-            return <div className="font-medium truncate max-w-[5rem]">Unavailable</div>
+            return <div className="font-medium truncate w-full">Unavailable</div>
           }
-          
+
           if (slot.status === "booked") {
             return (
-              <div>
+              <div className="w-full">
                 {/* Conditional rendering: show customer name if they are non-empty, otherwise show "Booked" */}
 
-                <div className="font-medium truncate max-w-[5rem]">{ slot.customerName != null ? slot.customerName : "Anonymous" }</div>
+                <div className="font-medium truncate w-full">{ slot.customerName != null ? slot.customerName : "Anonymous" }</div>
                 {(slot.bookingStart || slot.bookingEnd) && (
-                  <div className="text-[10px] sm:text-xs truncate max-w-[5rem] opacity-80">
+                  <div className="text-[9px] sm:text-xs truncate w-full opacity-80">
                     {slot.bookingStart?.slice(0, 5)} - {slot.bookingEnd?.slice(0, 5)}
                   </div>
                 )}
               </div>
             )
           }
-          
+
           if (slot.status === "available" || slot.status === "cancelled") {
             return (
-              <div>
-                <div className="font-medium cursor-pointer truncate max-w-[5rem]">Available</div>
+              <div className="w-full">
+                <div className="font-medium cursor-pointer truncate w-full">Available</div>
                 {/* <div className="text-xs">${slot.price}</div> */}
               </div>
             )
           }
-          
+
           if (slot.status === "pending") {
             return (
-              <div>
-                <div className="font-medium truncate max-w-[5rem]">Pending</div>
+              <div className="w-full">
+                <div className="font-medium truncate w-full">
+                  {slot.customerName != null ? slot.customerName : "Anonymous"}
+                </div>
+                <div className="text-[9px] sm:text-xs truncate w-full opacity-80">Pending</div>
               </div>
             )
           }
-          
-          return <div className="font-medium truncate max-w-[5rem]">Closed</div>
+
+          return <div className="font-medium truncate w-full">Closed</div>
         })()}
       </div>
     </td>
@@ -261,23 +276,23 @@ export function ScheduleTable({ scheduleData, isLoading, adminCredential, handle
       <div className="bg-white rounded-lg shadow-lg overflow-hidden">
 
 
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="sticky top-0 z-50" style={{ backgroundColor: '#f9fafb' }}>
+        <div className="overflow-auto max-h-[65vh]">
+          <table className="w-full table-fixed">
+            <thead className="sticky top-0 z-10" style={{ backgroundColor: '#f9fafb' }}>
               <tr>
-                <th className="px-2 sm:px-3 py-1.5 sm:py-3 text-left text-xs font-medium uppercase tracking-wider" style={{ color: siteConfig.theme.maintext }}>
+                <th className="w-12 sm:w-20 px-1 sm:px-3 py-1.5 sm:py-3 text-left text-[10px] sm:text-xs font-medium uppercase tracking-wider" style={{ color: siteConfig.theme.maintext }}>
                   Time
                 </th>
                 {scheduleData.rooms
                   // .filter((room) => room.is_active)
-                  .sort((a, b) => a.room_name.localeCompare(b.room_name)).map((room) => (
+                  .sort(compareRoomOrder).map((room) => (
                   <th
                     key={room.room_id}
-                    className="px-1.5 sm:px-4 py-1.5 sm:py-3 text-center text-xs font-medium uppercase tracking-wider"
+                    className="px-1 sm:px-4 py-1.5 sm:py-3 text-center text-[10px] sm:text-xs font-medium uppercase tracking-wider"
                     style={{ color: siteConfig.theme.maintext }}
                   >
                     <div className="flex flex-col items-center">
-                      <span className="font-semibold">{room.room_name}</span>
+                      <span className="font-semibold truncate w-full">{room.room_name}</span>
                       {!room.is_active && (
                         <span className="text-[10px] font-normal normal-case" style={{ color: siteConfig.theme.error }}>
                           Closed
@@ -295,12 +310,12 @@ export function ScheduleTable({ scheduleData, isLoading, adminCredential, handle
             <tbody className="bg-white divide-y" style={{ borderColor: '#e5e7eb' }}>
               {scheduleData.timeSlots.slice(0, -1).map((timeSlot) => (
                 <tr key={timeSlot} className="hover:bg-gray-50">
-                  <td className="px-2 sm:px-4 py-1.5 sm:py-3 whitespace-nowrap text-xs sm:text-sm font-medium" style={{ color: siteConfig.theme.maintext }}>
+                  <td className="w-12 sm:w-20 px-1 sm:px-4 py-1.5 sm:py-3 whitespace-nowrap text-[11px] sm:text-sm font-medium" style={{ color: siteConfig.theme.maintext }}>
                     {timeSlot}
                   </td>
                   {scheduleData.rooms
                     // .filter((room) => room.is_active)
-                    .sort((a, b) => a.room_name.localeCompare(b.room_name)).map((room) => {
+                    .sort(compareRoomOrder).map((room) => {
                       const slot = scheduleData.bookings.find((booking) => {
                       return (
                         booking.roomId === room.room_id &&
@@ -312,10 +327,10 @@ export function ScheduleTable({ scheduleData, isLoading, adminCredential, handle
                       return (
                         <td
                           key={`${room.room_id}-${timeSlot}`}
-                          className="px-1.5 sm:px-4 py-1.5 sm:py-3 text-center"
+                          className="px-1 sm:px-4 py-1.5 sm:py-3 text-center"
                         >
                           <div
-                            className="p-1 sm:p-2 text-xs sm:text-sm text-gray-400"
+                            className="p-1 sm:p-2 text-[11px] sm:text-sm text-gray-400 flex items-center justify-center w-full h-full min-h-[2.75rem] sm:min-h-[3.25rem]"
                             style={{ color: siteConfig.theme.error }}
                           >
                             N/A

@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { Edit, Trash2, Plus, AlertCircle } from "lucide-react"
 import { adminAPI, getAdminUser } from "@/lib/admin-service"
+import { TimeSelect } from "@/components/ui/time-select"
 import type { Promotion } from "@/types"
 
 interface Room {
@@ -353,6 +354,8 @@ export function PromotionsTab({ promotions, dataLoading, adminCredential, onRefr
                   <th className="px-3 sm:px-6 py-3 text-left text-xs sm:text-sm font-medium text-gray-900">Name</th>
                   <th className="px-3 sm:px-6 py-3 text-left text-xs sm:text-sm font-medium text-gray-900">Code</th>
                   <th className="px-3 sm:px-6 py-3 text-left text-xs sm:text-sm font-medium text-gray-900">Discount</th>
+                  <th className="px-3 sm:px-6 py-3 text-left text-xs sm:text-sm font-medium text-gray-900">Usage</th>
+                  <th className="px-3 sm:px-6 py-3 text-left text-xs sm:text-sm font-medium text-gray-900">Max Usage</th>
                   <th className="px-3 sm:px-6 py-3 text-left text-xs sm:text-sm font-medium text-gray-900">Active</th>
                   <th className="px-3 sm:px-6 py-3 text-right text-xs sm:text-sm font-medium text-gray-900">Actions</th>
                 </tr>
@@ -378,6 +381,8 @@ export function PromotionsTab({ promotions, dataLoading, adminCredential, onRefr
                       </td>
                       <td className="px-3 sm:px-6 py-2 sm:py-4 text-xs sm:text-sm text-gray-600">{promo.code}</td>
                       <td className="px-3 sm:px-6 py-2 sm:py-4 text-xs sm:text-sm text-gray-600">{discountDisplay}</td>
+                      <td className="px-3 sm:px-6 py-2 sm:py-4 text-xs sm:text-sm text-gray-600">{promo.used_count ?? promo.usedCount ?? 0}</td>
+                      <td className="px-3 sm:px-6 py-2 sm:py-4 text-xs sm:text-sm text-gray-600">{promo.max_usage ?? promo.maxUses ?? "Unlimited"}</td>
                       <td className="px-3 sm:px-6 py-2 sm:py-4 text-xs sm:text-sm">
                         <span className={`px-2 py-1 rounded text-white text-xs font-medium ${promo.isActive || promo.is_active ? 'bg-green-500' : 'bg-gray-500'}`}>
                           {promo.isActive || promo.is_active ? 'Active' : 'Inactive'}
@@ -460,7 +465,7 @@ export function PromotionsTab({ promotions, dataLoading, adminCredential, onRefr
                   )
                 }) : (
                   <tr key="no-promotions">
-                    <td colSpan={5} className="px-3 sm:px-6 py-2 sm:py-4 text-center text-xs sm:text-sm text-gray-500">
+                    <td colSpan={7} className="px-3 sm:px-6 py-2 sm:py-4 text-center text-xs sm:text-sm text-gray-500">
                       No promotions found
                     </td>
                   </tr>
@@ -563,23 +568,23 @@ export function PromotionsTab({ promotions, dataLoading, adminCredential, onRefr
               <div>
                 <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Start Time</label>
                 <p className="text-xs text-gray-500 mb-2">Promotion is only active from this time each day</p>
-                <input
-                  type="time"
+                <TimeSelect
                   value={formData.start_time || "00:00"}
-                  onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
+                  onChange={(time) => setFormData({ ...formData, start_time: time })}
                   disabled={!isCreateMode && !isAuthorized}
-                  className="w-full px-1 sm:px-3 py-1 sm:py-2 text-xs sm:text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  className="w-full"
+                  selectClassName="flex-1 min-w-0 px-1 sm:px-3 py-1 sm:py-2 text-xs sm:text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
               </div>
               <div>
                 <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">End Time</label>
                 <p className="text-xs text-gray-500 mb-2">...until this time, every day (e.g. 12:00 - 16:00)</p>
-                <input
-                  type="time"
-                  value={formData.end_time || "23:59"}
-                  onChange={(e) => setFormData({ ...formData, end_time: e.target.value })}
+                <TimeSelect
+                  value={formData.end_time || "23:30"}
+                  onChange={(time) => setFormData({ ...formData, end_time: time })}
                   disabled={!isCreateMode && !isAuthorized}
-                  className="w-full px-1 sm:px-3 py-1 sm:py-2 text-xs sm:text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  className="w-full"
+                  selectClassName="flex-1 min-w-0 px-1 sm:px-3 py-1 sm:py-2 text-xs sm:text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
               </div>
               <div>
