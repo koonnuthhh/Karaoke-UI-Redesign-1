@@ -10,6 +10,12 @@ import { LoadingSpinner } from "./ui/loading-spinner"
 import { PromoInput } from "./promo-input"
 import promptpay from "promptpay-qr"
 import { QRCodeCanvas } from "qrcode.react"
+import {
+  getStoredPendingBooking,
+  savePendingBooking,
+  clearPendingBooking,
+  type StoredPendingBooking,
+} from "../lib/pending-booking"
 
 interface BookingModalProps {
   isOpen: boolean
@@ -92,6 +98,36 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
   const timeoutStartedRef = useRef(false)
   const [isTimeoutExpired, setIsTimeoutExpired] = useState(false)
 
+  // Set when the modal was opened on the customer's own pending booking (matched
+  // via localStorage) — the flow then resumes at the payment step with the
+  // original times/amount instead of starting a fresh booking.
+  const [resumeInfo, setResumeInfo] = useState<StoredPendingBooking | null>(null)
+
+  useEffect(() => {
+    if (!isOpen || timeSlot.status !== "pending") return
+    const stored = getStoredPendingBooking()
+    if (!stored || stored.bookingId !== timeSlot.id) return
+
+    setResumeInfo(stored)
+    setFormData((prev) => ({
+      ...prev,
+      customerName: stored.customerName,
+      customerPhone: stored.customerPhone,
+    }))
+    setPromotionId(stored.promotionId || "")
+
+    const promptPayNumber = siteConfig.payment.promptPayNumber
+    setPaymentData({
+      qrPayload: promptpay(promptPayNumber, { amount: stored.amount }),
+      promptPayNumber,
+      accountName: siteConfig.payment.accountName,
+      amount: stored.amount,
+      bookingId: stored.bookingId,
+    })
+    setCurrentStep("payment")
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, timeSlot.id, timeSlot.status])
+
   // Only the last slot before close (01:00) can extend the booking past
   // normal closing time, and only up to 02:00 in that one case.
   const isMidnightHalf = startTime === "00:30"
@@ -121,6 +157,13 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
   const endTime = addMinutes(startTime, totalDuration)
   const totalPrice = calculatePrice(room.price_per_half_hour, totalDuration)
   const finalPrice = discountAmount > 0 ? promoFinalPrice : totalPrice
+
+  // When resuming a pending booking, the clicked slot may be any cell inside the
+  // booked range, so display the original booking's times/amount — not values
+  // recomputed from the clicked cell.
+  const displayStartTime = resumeInfo?.startTime ?? startTime
+  const displayEndTime = resumeInfo?.endTime ?? endTime
+  const displayDuration = resumeInfo?.duration ?? totalDuration
 
   const resetAppliedPromo = () => {
     setDiscountAmount(0)
@@ -226,6 +269,21 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
           bookingId: result.data.booking_id,
         })
 
+        // Remember the unfinished booking so the customer can click their pending
+        // slot on the schedule and resume payment after closing the modal.
+        savePendingBooking({
+          bookingId: result.data.booking_id,
+          roomId: timeSlot.roomId,
+          date: timeSlot.date,
+          startTime,
+          endTime,
+          duration: totalDuration,
+          amount: finalPrice,
+          customerName: formData.customerName,
+          customerPhone: formData.customerPhone,
+          promotionId,
+        })
+
         setCurrentStep("payment")
       } else {
         setError(result.message || "Failed to create booking")
@@ -294,6 +352,7 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
         const bookedResult = await bookedResponse.json()
 
         if (bookedResult.success) {
+          clearPendingBooking()
           setVerificationResult(result)
           setVerifyState("success")
         } else {
@@ -334,10 +393,18 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
       const result = await response.json()
 
       if (result.success) {
+        clearPendingBooking()
         setPaymentData(null)
         setSlipFile(null)
         setSlipPreview(null)
-        setCurrentStep("confirm")
+        if (resumeInfo) {
+          // A resumed booking has no fresh details/confirm state to fall back to —
+          // cancelling it just closes the modal.
+          setResumeInfo(null)
+          onClose()
+        } else {
+          setCurrentStep("confirm")
+        }
         setError("")
       }
     } catch (err) {
@@ -635,7 +702,7 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
         </div>
 
         <div className="space-y-2" style={{ color: siteConfig.theme.maintext }}>
-          <p className="text-lg font-semibold">Amount to Pay: ฿{finalPrice.toFixed(2)}</p>
+          <p className="text-lg font-semibold">Amount to Pay: ฿{(paymentData?.amount ?? finalPrice).toFixed(2)}</p>
           <p className="text-sm">PromptPay Number: {paymentData?.promptPayNumber}</p>
           <p className="text-sm">Account Name: {paymentData?.accountName}</p>
           <p className="text-sm" style={{ color: "#6b7280" }}>
@@ -671,14 +738,11 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
         onMouseEnter={secondaryButtonHover}
         onMouseLeave={secondaryButtonLeave}
       >
-        Back
+        {resumeInfo ? "Cancel Booking" : "Back"}
       </button>
       <button
         onClick={() => setCurrentStep("slip-upload")}
-        className="flex-1 px-4 py-2 text-white rounded-md transition-colors"
-        style={{ backgroundColor: siteConfig.theme.primary }}
-        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = siteConfig.theme.secondary)}
-        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = siteConfig.theme.primary)}
+        className="flex-1 px-4 py-2 text-white rounded-md transition-colors bg-sky-500 hover:bg-sky-600"
       >
         Verify Slip
       </button>
@@ -838,12 +902,12 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
                 <div className="flex justify-between">
                   <span>Time: </span>
                   <span>
-                    {startTime} - {endTime}
+                    {displayStartTime} - {displayEndTime}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Duration:</span>
-                  <span>{formatDuration(totalDuration)}</span>
+                  <span>{formatDuration(displayDuration)}</span>
                 </div>
               </div>
             </div>

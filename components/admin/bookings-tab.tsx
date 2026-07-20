@@ -208,6 +208,9 @@ export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabP
           price: editFinalPrice,
           ...(appliedPromotionId && { promotion_id: appliedPromotionId }),
           ...(currentUser && { booked_by_admin_id: currentUser.admin_id, booked_by_admin_name: currentUser.username }),
+          // Admin editing a pending booking and saving is treated as final confirmation —
+          // no need to wait on the customer's payment-slip verification.
+          ...(editTarget.status?.toLowerCase() === "pending" && { booking_status: "booked" }),
         }),
       })
 
@@ -771,7 +774,11 @@ export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabP
                 disabled={isSaving}
                 className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
               >
-                {isSaving ? "Saving..." : `Save Changes - ฿${editFinalPrice.toFixed(2)}`}
+                {isSaving
+                  ? "Saving..."
+                  : editTarget.status?.toLowerCase() === "pending"
+                    ? `Save & Confirm Booking - ฿${editFinalPrice.toFixed(2)}`
+                    : `Save Changes - ฿${editFinalPrice.toFixed(2)}`}
               </button>
             </div>
           </div>

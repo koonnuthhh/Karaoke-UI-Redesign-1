@@ -103,13 +103,15 @@ export default function AdminPanel() {
               { id: "admins", label: "Admins", icon: <Users className="w-4 h-4" /> },
               { id: "rooms", label: "Rooms", icon: <DoorOpen className="w-4 h-4" /> },
               { id: "bookings", label: "Bookings", icon: <BookOpen className="w-4 h-4" /> },
+              // href-based tab navigates to a route instead of switching the active tab
+              { id: "schedule", label: "Schedule", icon: <Calendar className="w-4 h-4" />, href: "/" },
               { id: "promotions", label: "Promotions", icon: <Gift className="w-4 h-4" /> }
             ].map((tab: any) => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as TabType)}
+                onClick={() => (tab.href ? router.push(tab.href) : setActiveTab(tab.id as TabType))}
                 className={`py-4 px-3 sm:px-4 border-b-2 font-medium text-xs sm:text-sm flex items-center gap-1.5 sm:gap-2 transition whitespace-nowrap ${
-                  activeTab === tab.id
+                  !tab.href && activeTab === tab.id
                     ? "border-blue-600 text-blue-600"
                     : "border-transparent text-slate-500 hover:text-slate-700"
                 }`}
@@ -117,12 +119,6 @@ export default function AdminPanel() {
                 {tab.icon} <span>{tab.label}</span>
               </button>
             ))}
-            <button
-              onClick={() => router.push("/")}
-              className="py-4 px-3 sm:px-4 border-b-2 border-transparent font-medium text-xs sm:text-sm flex items-center gap-1.5 sm:gap-2 transition whitespace-nowrap text-slate-500 hover:text-slate-700"
-            >
-              <Calendar className="w-4 h-4" /> <span>Schedule</span>
-            </button>
           </div>
         </div>
       </div>

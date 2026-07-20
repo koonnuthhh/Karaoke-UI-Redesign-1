@@ -175,6 +175,9 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                     price: editFinalPrice,
                     ...(editAppliedPromotionId && { promotion_id: editAppliedPromotionId }),
                     ...(currentUser && { booked_by_admin_id: currentUser.admin_id, booked_by_admin_name: currentUser.username }),
+                    // Admin editing a pending booking and saving is treated as final confirmation —
+                    // no need to wait on the customer's payment-slip verification.
+                    ...(timeSlot.status?.toLowerCase() === "pending" && { booking_status: "booked" }),
                 }),
             })
             const result = await response.json()
@@ -549,7 +552,11 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                                     disabled={isSaving}
                                     className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50"
                                 >
-                                    {isSaving ? <LoadingSpinner size="sm" /> : `Save Changes - ฿${editFinalPrice.toFixed(2)}`}
+                                    {isSaving
+                                        ? <LoadingSpinner size="sm" />
+                                        : timeSlot.status?.toLowerCase() === "pending"
+                                            ? `Save & Confirm Booking - ฿${editFinalPrice.toFixed(2)}`
+                                            : `Save Changes - ฿${editFinalPrice.toFixed(2)}`}
                                 </button>
                             </div>
                         </>

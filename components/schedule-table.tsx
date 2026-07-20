@@ -9,6 +9,7 @@ import { AdminBookingModal } from "../components/admin-booking-modal"
 import { AlertModal } from "./AlertModal"
 import { isTimeSlotPast } from "../lib/time-utils"
 import { getAdminUser } from "../lib/admin-service"
+import { getStoredPendingBooking } from "../lib/pending-booking"
 import type { Room } from "../types"
 
 // Ascending by display_order; rooms with no order set sort after ordered ones,
@@ -55,6 +56,11 @@ function SlotCell({
   // Inactive rooms are shown but can't be booked by customers
   const isDisabledForBooking = !roomActive && !adminCredential
 
+  // The customer's own unfinished booking (created in this browser, still pending)
+  // stays clickable so they can resume the payment flow.
+  const isOwnPendingBooking =
+    !adminCredential && slot.status === "pending" && getStoredPendingBooking()?.bookingId === slot.id
+
   function getSlotStyles(slot: TimeSlot): string {
     const status = slot.status
     const isPast = isTimeSlotPast(slot.startTime, scheduleDate)
@@ -83,8 +89,9 @@ function SlotCell({
       case "available":
         return `${baseStyles} ${siteConfig.theme.maintext} border-green-200`
       case "pending":
-        // Admin can click pending to manage it, regular users can't
-        if (adminCredential) {
+        // Admin can click pending to manage it; a customer can click only their
+        // own pending booking (to resume payment)
+        if (adminCredential || isOwnPendingBooking) {
           return `${baseStyles} ${siteConfig.theme.maintext} border-yellow-200 cursor-pointer`
         }
         return `${baseStyles} ${siteConfig.theme.maintext} border-yellow-200 cursor-not-allowed`
@@ -154,8 +161,9 @@ function SlotCell({
           if (adminCredential) {
             onClick(slot)
           } else {
-            // Regular users: only available or cancelled slots are clickable
-            if (slot.status === "available" || slot.status === "cancelled") {
+            // Regular users: available/cancelled slots, plus their own pending
+            // booking to resume the payment flow
+            if (slot.status === "available" || slot.status === "cancelled" || isOwnPendingBooking) {
               onClick(slot)
             }
           }
@@ -204,7 +212,9 @@ function SlotCell({
                 <div className="font-medium truncate w-full">
                   {slot.customerName != null ? slot.customerName : "Anonymous"}
                 </div>
-                <div className="text-[9px] sm:text-xs truncate w-full opacity-80">Pending</div>
+                <div className="text-[9px] sm:text-xs truncate w-full opacity-80">
+                  {isOwnPendingBooking ? "Tap to continue" : "Pending"}
+                </div>
               </div>
             )
           }
