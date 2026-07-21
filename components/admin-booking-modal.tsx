@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { X } from "lucide-react"
+import { X, Plus, Minus } from "lucide-react"
 import { siteConfig } from "../config/site-config"
 import type { TimeSlot, Room, ScheduleData, BookingRequest } from "../types"
 import { calculatePrice, formatDuration, isTimeSlotAvailable } from "../lib/time-utils"
@@ -10,6 +10,9 @@ import { TimeSelect } from "../components/ui/time-select"
 import { AlertModal } from "./AlertModal"
 import { PromoInput } from "./promo-input"
 import { getAdminUser } from "../lib/admin-service"
+import { isValidThaiPhone } from "../lib/validation"
+
+const MIN_DURATION_MINUTES = 30 // bookings step in half-hour increments, 30 min minimum
 
 // Treats times before 06:00 as belonging to "the next day" so overnight
 // hours (e.g. open 12:00, close 01:00) compare/add correctly.
@@ -57,7 +60,7 @@ interface AdminBookingModalProps {
 }
 export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleData, adminCredential }: AdminBookingModalProps) {
     const [startTime, setStartTime] = useState(timeSlot.startTime)
-    const [endTime, setEndTime] = useState("")
+    const [durationMinutes, setDurationMinutes] = useState(MIN_DURATION_MINUTES)
     const [customPrice, setCustomPrice] = useState<number | null>(null)
     const [discount, setDiscount] = useState<{ original_price: number; discount_amount: number; final_price: number } | null>(null)
     const [appliedPromoCode, setAppliedPromoCode] = useState<string | null>(null)
@@ -89,10 +92,39 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
     const [editError, setEditError] = useState("")
 
     const editRoom = editForm ? scheduleData.rooms.find(r => r.room_id === editForm.roomId) : undefined
-    const editEndTime = editForm ? addMinutesToTime(editForm.startTime, editForm.duration) : ""
-    const editCalculatedPrice = editForm && editRoom ? calculatePrice(editRoom.price_per_half_hour, editForm.duration) : 0
+
+    // Same overnight-close rule as the create flow: the 00:30 slot may extend to 02:00,
+    // every other start time is capped at the configured close time. The conflict bound
+    // excludes the booking being edited so its own slots don't block its extension.
+    const editIsMidnightHalf = editForm?.startTime === "00:30"
+    const editEffectiveCloseTime = editIsMidnightHalf ? "02:00" : siteConfig.schedule.closeTime
+    const editBookingsExclSelf = scheduleData.bookings.filter(b => b.id !== timeSlot.id)
+    const editFirstConflict = editForm
+        ? scheduleData.timeSlots
+            .filter(slot => toComparableDate(slot) > toComparableDate(editForm.startTime))
+            .find(slot => !isTimeSlotAvailable(slot, editForm.roomId, editBookingsExclSelf))
+        : undefined
+    const editMaxDuration = editForm
+        ? Math.max(MIN_DURATION_MINUTES, Math.min(
+            (toComparableDate(editEffectiveCloseTime).getTime() - toComparableDate(editForm.startTime).getTime()) / (1000 * 60),
+            editFirstConflict ? minutesBetween(editForm.startTime, editFirstConflict) : Infinity,
+        ))
+        : MIN_DURATION_MINUTES
+
+    // Clamp at render so a start-time/room change that shrinks the window never leaves a
+    // stale over-long duration selected.
+    const editDuration = editForm
+        ? Math.min(Math.max(editForm.duration, MIN_DURATION_MINUTES), editMaxDuration)
+        : 0
+    const editEndTime = editForm ? addMinutesToTime(editForm.startTime, editDuration) : ""
+    const editCalculatedPrice = editForm && editRoom ? calculatePrice(editRoom.price_per_half_hour, editDuration) : 0
     const editPriceBeforeDiscount = editCustomPrice !== null && editCustomPrice >= 0 ? editCustomPrice : editCalculatedPrice
     const editFinalPrice = editDiscount ? editDiscount.final_price : editPriceBeforeDiscount
+
+    const incrementEditDuration = () =>
+        editForm && setEditForm({ ...editForm, duration: Math.min(Math.max(editDuration, MIN_DURATION_MINUTES) + 30, editMaxDuration) })
+    const decrementEditDuration = () =>
+        editForm && setEditForm({ ...editForm, duration: Math.max(editDuration - 30, MIN_DURATION_MINUTES) })
 
     // Automatically recalculate the applied promo's discount when the price, room, or time being edited changes.
     useEffect(() => {
@@ -211,73 +243,47 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
         })
         .find(slot => !isTimeSlotAvailable(slot, room.room_id, scheduleData.bookings))
 
-    const firstCloseSlot = scheduleData.timeSlots.find(slot => slot === siteConfig.schedule.closeTime)
-
-    const availableEndTimes = scheduleData.timeSlots.filter(slot => {
-        let startTimeObj, slotTime
-        if (startTime < "06:00") startTimeObj = new Date(`2000-01-02T${startTime}`)
-        else startTimeObj = new Date(`2000-01-01T${startTime}`)
-        if (slot < "06:00") slotTime = new Date(`2000-01-02T${slot}`)
-        else slotTime = new Date(`2000-01-01T${slot}`)
-
-        if (slotTime <= startTimeObj) return false
-        if (firstUnavailableSlot) {
-            let unavailableTime
-            if (firstUnavailableSlot < "06:00") unavailableTime = new Date(`2000-01-02T${firstUnavailableSlot}`)
-            else unavailableTime = new Date(`2000-01-01T${firstUnavailableSlot}`)
-            if (slotTime > unavailableTime) return false
-        }
-        if (firstCloseSlot) {
-            let closeTime
-            if (firstCloseSlot < "06:00") closeTime = new Date(`2000-01-02T${firstCloseSlot}`)
-            else closeTime = new Date(`2000-01-01T${firstCloseSlot}`)
-            if (slotTime > closeTime) return false
-        }
-        return true
-    })
-
-    // default end time logic same as BookingModal
-    // Set default end time separately
-    useEffect(() => {
-        if (isOpen && startTime) {
-            const [startHour, startMinute] = startTime.split(':').map(Number);
-            let endHour = startHour;
-            let endMinute = startMinute + 30;
-
-            if (endMinute >= 60) {
-                endMinute -= 60;
-                endHour += 1;
-            }
-            if (endHour >= 24) {
-                endHour -= 24;
-            }
-
-            const defaultEnd = `${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`;
-            if (scheduleData.timeSlots.includes(defaultEnd)) {
-                setEndTime(defaultEnd);
-            }
-        }
-    }, [isOpen, startTime, scheduleData.timeSlots]);
-
-    // Reset custom price and discount when modal opens
+    // Reset custom price, discount, and duration when modal opens
     useEffect(() => {
         if (isOpen) {
             setCustomPrice(null)
             setDiscount(null)
             setAppliedPromoCode(null)
             setAppliedPromotionId(null)
+            setDurationMinutes(MIN_DURATION_MINUTES)
             closeEditMode()
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen, timeSlot.id]);
 
-    const totalDuration = startTime && endTime
-        ? (() => {
-            let endTimeDate = endTime < "06:00" ? new Date(`2000-01-02T${endTime}`) : new Date(`2000-01-01T${endTime}`)
-            let startTimeDate = startTime < "06:00" ? new Date(`2000-01-02T${startTime}`) : new Date(`2000-01-01T${startTime}`)
-            return (endTimeDate.getTime() - startTimeDate.getTime()) / (1000 * 60)
-        })()
+    // Mirrors BookingModal: only the 00:30 slot (the last one before the 01:00 close)
+    // may extend past normal closing, and only up to 02:00. Every other start time is
+    // capped at the configured close time.
+    const isMidnightHalf = startTime === "00:30"
+    const effectiveCloseTime = isMidnightHalf ? "02:00" : siteConfig.schedule.closeTime
+
+    // Max duration is bounded by whichever comes first: the effective close time, or
+    // the next already-booked slot (a conflict). 01:30/02:00 aren't real bookable
+    // slots, so they can't hold a conflicting booking — the close bound handles them.
+    const minutesUntilClose =
+        (toComparableDate(effectiveCloseTime).getTime() - toComparableDate(startTime).getTime()) / (1000 * 60)
+    const minutesUntilConflict = firstUnavailableSlot
+        ? minutesBetween(startTime, firstUnavailableSlot)
+        : Infinity
+    const maxDurationMinutes = Math.max(0, Math.min(minutesUntilClose, minutesUntilConflict))
+    const canBook = maxDurationMinutes >= MIN_DURATION_MINUTES
+
+    // Clamp at render so a start-time change that shrinks the window never leaves a
+    // stale over-long duration selected.
+    const totalDuration = canBook
+        ? Math.min(Math.max(durationMinutes, MIN_DURATION_MINUTES), maxDurationMinutes)
         : 0
+    const endTime = canBook && startTime ? addMinutesToTime(startTime, totalDuration) : ""
+
+    const incrementDuration = () =>
+        setDurationMinutes((prev) => Math.min(Math.max(prev, MIN_DURATION_MINUTES) + 30, maxDurationMinutes))
+    const decrementDuration = () =>
+        setDurationMinutes((prev) => Math.max(prev - 30, MIN_DURATION_MINUTES))
 
     const calculatedPrice = calculatePrice(room.price_per_half_hour, totalDuration)
 
@@ -327,8 +333,12 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
     }
 
     const createAndConfirmBooking = async () => {
-        if (!startTime || !endTime) {
-            setError("Please select both start and end times")
+        if (!startTime || !endTime || !canBook) {
+            setError("Please select a valid start time and duration")
+            return
+        }
+        if (!formData.customerPhone.trim() || !isValidThaiPhone(formData.customerPhone)) {
+            setError("Please enter a valid 10-digit phone number (e.g. 0812345678)")
             return
         }
         setIsSubmitting(true)
@@ -456,7 +466,7 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                                 />
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4 mb-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
                                     <TimeSelect
@@ -467,15 +477,30 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Duration (minutes)</label>
-                                    <input
-                                        type="number"
-                                        min={30}
-                                        step={30}
-                                        value={editForm.duration}
-                                        onChange={(e) => setEditForm({ ...editForm, duration: parseInt(e.target.value) || 0 })}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                    />
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Duration</label>
+                                    <div className="flex items-center justify-between h-[42px] px-2 border border-gray-300 rounded-md">
+                                        <button
+                                            type="button"
+                                            onClick={decrementEditDuration}
+                                            disabled={editDuration <= MIN_DURATION_MINUTES}
+                                            className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full border border-purple-500 text-purple-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                            aria-label="Decrease duration by 30 minutes"
+                                        >
+                                            <Minus className="w-4 h-4" />
+                                        </button>
+                                        <span className="text-sm font-semibold text-gray-900 whitespace-nowrap">
+                                            {formatDuration(editDuration)}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={incrementEditDuration}
+                                            disabled={editDuration >= editMaxDuration}
+                                            className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full border border-purple-500 text-purple-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                            aria-label="Increase duration by 30 minutes"
+                                        >
+                                            <Plus className="w-4 h-4" />
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                             <p className="text-xs text-gray-500 -mt-2 mb-4">End Time: {editEndTime}</p>
@@ -596,12 +621,12 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                             {/* Same UI as BookingModal */}
                             <div className="mb-6">
                                 <h3 className="font-semibold text-gray-900 mb-3">Select Time : Room {room.room_name}</h3>
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
                                         <select
                                             value={startTime}
-                                            onChange={(e) => { setStartTime(e.target.value); setEndTime(""); }}
+                                            onChange={(e) => { setStartTime(e.target.value); setDurationMinutes(MIN_DURATION_MINUTES); }}
                                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
                                         >
                                             {availableSlots.map((slot) => (
@@ -610,19 +635,38 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">End Time</label>
-                                        <select
-                                            value={endTime}
-                                            onChange={(e) => setEndTime(e.target.value)}
-                                            disabled={!startTime}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-gray-100"
-                                        >
-                                            {availableEndTimes.map((slot) => (
-                                                <option key={slot} value={slot}>{slot}</option>
-                                            ))}
-                                        </select>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Duration</label>
+                                        <div className="flex items-center justify-between h-[42px] px-2 border border-gray-300 rounded-md">
+                                            <button
+                                                type="button"
+                                                onClick={decrementDuration}
+                                                disabled={!canBook || totalDuration <= MIN_DURATION_MINUTES}
+                                                className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full border border-purple-500 text-purple-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                                aria-label="Decrease duration by 30 minutes"
+                                            >
+                                                <Minus className="w-4 h-4" />
+                                            </button>
+                                            <span className="text-sm font-semibold text-gray-900 whitespace-nowrap">
+                                                {formatDuration(totalDuration)}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={incrementDuration}
+                                                disabled={!canBook || totalDuration >= maxDurationMinutes}
+                                                className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full border border-purple-500 text-purple-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                                aria-label="Increase duration by 30 minutes"
+                                            >
+                                                <Plus className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                        <p className="text-xs text-gray-500 mt-1">End Time: {endTime || "—"}</p>
                                     </div>
                                 </div>
+                                {!canBook && (
+                                    <p className="text-sm mt-2 text-red-600">
+                                        This start time can't fit a {MIN_DURATION_MINUTES}-minute booking. Pick an earlier start time.
+                                    </p>
+                                )}
                             </div>
 
                             {/* Booking Summary */}
@@ -657,7 +701,16 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                                 </div> */}
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Phone *</label>
-                                    <input name="customerPhone" value={formData.customerPhone} onChange={handleInputChange} required className="w-full px-3 py-2 border border-gray-300 rounded-md" />
+                                    <input
+                                        name="customerPhone"
+                                        value={formData.customerPhone}
+                                        onChange={(e) => setFormData(prev => ({ ...prev, customerPhone: e.target.value.replace(/\D/g, "") }))}
+                                        required
+                                        inputMode="numeric"
+                                        maxLength={10}
+                                        placeholder="0812345678"
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                                    />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -711,7 +764,7 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                                 <button onClick={onClose} className="flex-1 bg-gray-200 rounded p-2">Cancel</button>
                                 <button
                                     onClick={createAndConfirmBooking}
-                                    disabled={isSubmitting}
+                                    disabled={isSubmitting || !canBook}
                                     className="flex-1 bg-purple-600 text-white rounded p-2 hover:bg-purple-700 disabled:opacity-50"
                                 >
                                     {isSubmitting ? <LoadingSpinner size="sm" /> : "Book (No Payment)"}

@@ -1,13 +1,25 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Calendar, ChevronLeft, ChevronRight, RefreshCw, Eye, Pencil, X, AlertCircle } from "lucide-react"
+import { Calendar, ChevronLeft, ChevronRight, RefreshCw, Eye, Pencil, X, AlertCircle, Plus, Minus } from "lucide-react"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { PromoInput } from "@/components/promo-input"
-import { calculatePrice } from "@/lib/time-utils"
+import { calculatePrice, formatDuration } from "@/lib/time-utils"
 import { getAdminUser } from "@/lib/admin-service"
 import { TimeSelect } from "@/components/ui/time-select"
+import { siteConfig } from "@/config/site-config"
 import type { TimeSlot, Room } from "@/types"
+
+const MIN_DURATION_MINUTES = 30 // bookings step in half-hour increments, 30 min minimum
+
+// Minutes between two "HH:MM" times, treating an end that is not after the start as
+// crossing midnight (e.g. 00:30 -> 02:00 spans the overnight close).
+function minutesBetween(start: string, end: string): number {
+  let endDate = toComparableDate(end)
+  const startDate = toComparableDate(start)
+  if (endDate <= startDate) endDate = new Date(endDate.getTime() + 24 * 60 * 60 * 1000)
+  return (endDate.getTime() - startDate.getTime()) / (1000 * 60)
+}
 
 interface BookingsTabProps {
   dataLoading: boolean
@@ -68,10 +80,44 @@ export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabP
   // formula (`calculatePrice`) and promo-reapply pattern as AdminBookingModal
   // uses when creating a booking.
   const editRoom = editForm ? rooms.find((r) => r.room_id === editForm.roomId) : undefined
-  const editEndTime = editForm ? addMinutesToTime(editForm.startTime, editForm.duration) : ""
-  const editCalculatedPrice = editForm && editRoom ? calculatePrice(editRoom.price_per_half_hour, editForm.duration) : 0
+
+  // Same overnight-close rule as the booking page: the 00:30 slot may extend to 02:00,
+  // every other start time is capped at the configured close time. The conflict bound
+  // is the next booking in the same room (excluding this one and cancelled ones), so an
+  // edit can't be stretched over another booking.
+  const editEffectiveCloseTime = editForm?.startTime === "00:30" ? "02:00" : siteConfig.schedule.closeTime
+  const editNextBookingStart = editForm
+    ? bookings
+        .filter((b) =>
+          b.id !== editTarget?.id &&
+          b.roomId === editForm.roomId &&
+          b.status?.toLowerCase() !== "cancelled" &&
+          toComparableDate(b.startTime) > toComparableDate(editForm.startTime),
+        )
+        .map((b) => b.startTime)
+        .sort((a, z) => toComparableDate(a).getTime() - toComparableDate(z).getTime())[0]
+    : undefined
+  const editMaxDuration = editForm
+    ? Math.max(MIN_DURATION_MINUTES, Math.min(
+        minutesBetween(editForm.startTime, editEffectiveCloseTime),
+        editNextBookingStart ? minutesBetween(editForm.startTime, editNextBookingStart) : Infinity,
+      ))
+    : MIN_DURATION_MINUTES
+
+  // Clamp at render so a start-time/room change that shrinks the window never leaves a
+  // stale over-long duration selected.
+  const editDuration = editForm
+    ? Math.min(Math.max(editForm.duration, MIN_DURATION_MINUTES), editMaxDuration)
+    : 0
+  const editEndTime = editForm ? addMinutesToTime(editForm.startTime, editDuration) : ""
+  const editCalculatedPrice = editForm && editRoom ? calculatePrice(editRoom.price_per_half_hour, editDuration) : 0
   const editPriceBeforeDiscount = customPrice !== null && customPrice >= 0 ? customPrice : editCalculatedPrice
   const editFinalPrice = discount ? discount.final_price : editPriceBeforeDiscount
+
+  const incrementEditDuration = () =>
+    editForm && setEditForm({ ...editForm, duration: Math.min(Math.max(editDuration, MIN_DURATION_MINUTES) + 30, editMaxDuration) })
+  const decrementEditDuration = () =>
+    editForm && setEditForm({ ...editForm, duration: Math.max(editDuration - 30, MIN_DURATION_MINUTES) })
 
   // Automatically recalculate the applied promo's discount when the price,
   // room, or time being edited changes.
@@ -204,7 +250,7 @@ export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabP
           room_id: editForm.roomId,
           username: editForm.customerName,
           start_time: editForm.startTime,
-          end_time: addMinutesToTime(editForm.startTime, editForm.duration),
+          end_time: editEndTime,
           price: editFinalPrice,
           ...(appliedPromotionId && { promotion_id: appliedPromotionId }),
           ...(currentUser && { booked_by_admin_id: currentUser.admin_id, booked_by_admin_name: currentUser.username }),
@@ -674,7 +720,7 @@ export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabP
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
                   <TimeSelect
@@ -685,15 +731,30 @@ export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabP
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Duration (minutes)</label>
-                  <input
-                    type="number"
-                    min={30}
-                    step={30}
-                    value={editForm.duration}
-                    onChange={(e) => setEditForm({ ...editForm, duration: parseInt(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Duration</label>
+                  <div className="flex items-center justify-between h-[42px] px-2 border border-gray-300 rounded-md">
+                    <button
+                      type="button"
+                      onClick={decrementEditDuration}
+                      disabled={editDuration <= MIN_DURATION_MINUTES}
+                      className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full border border-indigo-500 text-indigo-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      aria-label="Decrease duration by 30 minutes"
+                    >
+                      <Minus className="w-4 h-4" />
+                    </button>
+                    <span className="text-sm font-semibold text-gray-900 whitespace-nowrap">
+                      {formatDuration(editDuration)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={incrementEditDuration}
+                      disabled={editDuration >= editMaxDuration}
+                      className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full border border-indigo-500 text-indigo-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      aria-label="Increase duration by 30 minutes"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
 

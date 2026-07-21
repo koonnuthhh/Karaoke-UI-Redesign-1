@@ -16,6 +16,7 @@ import {
   clearPendingBooking,
   type StoredPendingBooking,
 } from "../lib/pending-booking"
+import { isValidThaiPhone } from "../lib/validation"
 
 interface BookingModalProps {
   isOpen: boolean
@@ -231,6 +232,11 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
 
     if (!formData.customerName.trim() || !formData.customerPhone.trim()) {
       setSelectError("Please fill in your name and phone number")
+      return
+    }
+
+    if (!isValidThaiPhone(formData.customerPhone)) {
+      setSelectError("Please enter a valid 10-digit phone number (e.g. 0812345678)")
       return
     }
 
@@ -519,8 +525,15 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
             id="customerPhone"
             name="customerPhone"
             required
+            inputMode="numeric"
+            maxLength={10}
             value={formData.customerPhone}
-            onChange={handleInputChange}
+            onChange={(e) => {
+              // Restrict to digits only so the stored value always matches what's validated
+              const digitsOnly = e.target.value.replace(/\D/g, "")
+              setFormData((prev) => ({ ...prev, customerPhone: digitsOnly }))
+            }}
+            placeholder="0812345678"
             className="w-full px-3 py-2 border rounded-md focus:outline-none"
             style={{ borderColor: "#d1d5db", color: siteConfig.theme.maintext }}
           />
