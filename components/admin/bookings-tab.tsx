@@ -4,13 +4,20 @@ import { useState, useEffect } from "react"
 import { Calendar, ChevronLeft, ChevronRight, RefreshCw, Eye, Pencil, X, AlertCircle, Plus, Minus } from "lucide-react"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { PromoInput } from "@/components/promo-input"
-import { calculatePrice, formatDuration } from "@/lib/time-utils"
+import { calculatePrice, formatDuration, generateTimeSlots } from "@/lib/time-utils"
 import { getAdminUser } from "@/lib/admin-service"
-import { TimeSelect } from "@/components/ui/time-select"
 import { siteConfig } from "@/config/site-config"
 import type { TimeSlot, Room } from "@/types"
 
 const MIN_DURATION_MINUTES = 30 // bookings step in half-hour increments, 30 min minimum
+
+// Bookable start slots within business hours (same grid the Admin Booking modal
+// offers). Drops the final close slot since a booking can't start at closing time.
+const START_TIME_OPTIONS = generateTimeSlots(
+  siteConfig.schedule.openTime,
+  siteConfig.schedule.closeTime,
+  siteConfig.schedule.slotDuration,
+).slice(0, -1)
 
 // Minutes between two "HH:MM" times, treating an end that is not after the start as
 // crossing midnight (e.g. 00:30 -> 02:00 spans the overnight close).
@@ -217,7 +224,8 @@ export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabP
     setEditForm({
       roomId: booking.roomId,
       customerName: booking.customerName || "",
-      startTime: booking.startTime,
+      // Normalize to "HH:MM" so it matches the slot dropdown options
+      startTime: booking.startTime?.slice(0, 5) || booking.startTime,
       duration: booking.duration || 30,
     })
     setCustomPrice(null)
@@ -723,12 +731,18 @@ export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabP
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
-                  <TimeSelect
+                  <select
                     value={editForm.startTime}
-                    onChange={(time) => setEditForm({ ...editForm, startTime: time })}
-                    className="w-full"
-                    selectClassName="flex-1 min-w-0 px-2 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
+                    onChange={(e) => setEditForm({ ...editForm, startTime: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    {editForm.startTime && !START_TIME_OPTIONS.includes(editForm.startTime) && (
+                      <option value={editForm.startTime}>{editForm.startTime}</option>
+                    )}
+                    {START_TIME_OPTIONS.map((slot) => (
+                      <option key={slot} value={slot}>{slot}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Duration</label>
