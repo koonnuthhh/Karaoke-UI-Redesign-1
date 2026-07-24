@@ -526,11 +526,12 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
             name="customerPhone"
             required
             inputMode="numeric"
-            maxLength={10}
+            maxLength={20}
             value={formData.customerPhone}
             onChange={(e) => {
-              // Restrict to digits only so the stored value always matches what's validated
-              const digitsOnly = e.target.value.replace(/\D/g, "")
+              // Strip separators (e.g. pasted "089-995-6542") and keep digits only,
+              // clamped to 10 so the stored value always matches what's validated
+              const digitsOnly = e.target.value.replace(/\D/g, "").slice(0, 10)
               setFormData((prev) => ({ ...prev, customerPhone: digitsOnly }))
             }}
             placeholder="0812345678"

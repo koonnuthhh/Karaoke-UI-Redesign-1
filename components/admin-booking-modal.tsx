@@ -715,10 +715,10 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                                     <input
                                         name="customerPhone"
                                         value={formData.customerPhone}
-                                        onChange={(e) => setFormData(prev => ({ ...prev, customerPhone: e.target.value.replace(/\D/g, "") }))}
+                                        onChange={(e) => setFormData(prev => ({ ...prev, customerPhone: e.target.value.replace(/\D/g, "").slice(0, 10) }))}
                                         required
                                         inputMode="numeric"
-                                        maxLength={10}
+                                        maxLength={20}
                                         placeholder="0812345678"
                                         className="w-full px-3 py-2 border border-gray-300 rounded-md"
                                     />
