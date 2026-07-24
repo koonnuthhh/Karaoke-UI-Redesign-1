@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect, useRef } from "react"
-import { X, Upload, Check, AlertCircle, Loader2, Minus, Plus } from "lucide-react"
+import { X, Upload, Check, AlertCircle, Loader2, Minus, Plus, Calendar, Clock } from "lucide-react"
 import { siteConfig } from "../config/site-config"
 import type { TimeSlot, Room, ScheduleData } from "../types"
 import { calculatePrice, formatDuration, isTimeSlotAvailable } from "../lib/time-utils"
@@ -620,20 +620,37 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
         <h3 className="font-semibold mb-2" style={{ color: siteConfig.theme.maintext }}>
           Booking Summary
         </h3>
+
+        {/* Prominent date & time — customers often overlook these and book the
+            wrong slot, so surface them large, bold and clearly separated. */}
+        <div
+          className="rounded-lg border-2 p-3 mb-3"
+          style={{ borderColor: siteConfig.theme.primary, backgroundColor: "#eff6ff" }}
+        >
+          <div className="flex items-center gap-2 mb-1.5" style={{ color: siteConfig.theme.secondary }}>
+            <Calendar className="w-5 h-5 flex-shrink-0" style={{ color: siteConfig.theme.primary }} />
+            <span className="text-base font-bold">
+              {new Date(timeSlot.date + "T00:00:00").toLocaleDateString("en-GB", {
+                weekday: "long",
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+              })}
+            </span>
+          </div>
+          <div className="flex items-baseline gap-2" style={{ color: siteConfig.theme.secondary }}>
+            <Clock className="w-5 h-5 flex-shrink-0 self-center" style={{ color: siteConfig.theme.primary }} />
+            <span className="text-2xl font-extrabold tracking-tight">
+              {startTime} – {endTime}
+            </span>
+            <span className="text-sm font-medium">({formatDuration(totalDuration)})</span>
+          </div>
+          
+        </div>
+
         <div className="space-y-1 text-sm" style={{ color: siteConfig.theme.secondary }}>
           <p>
-            <span className="font-medium">Date:</span> {new Date(timeSlot.date).toLocaleDateString()}
-          </p>
-          <p>
             <span className="font-medium">Room:</span> {room.room_name}
-          </p>
-          <p>
-            <span className="font-medium">Time: </span>
-            {startTime} - {endTime}
-          </p>
-          <p>
-            <span className="font-medium">Duration: </span>
-            {formatDuration(totalDuration)}
           </p>
           <p>
             <span className="font-medium">Customer:</span> {formData.customerName}
@@ -662,6 +679,9 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
             </p>
           )}
         </div>
+        <p className="text-xs mt-2 font-medium" style={{ color: siteConfig.theme.error }}>
+          ⚠️ กรุณาตรวจสอบวันและเวลาให้ถูกต้องก่อนชำระเงิน / Please double-check the date &amp; time before paying.
+        </p>
       </div>
 
       {error && (

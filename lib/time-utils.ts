@@ -100,7 +100,9 @@ export function getConsecutiveSlots(selectedSlots: string[], allSlots: string[])
 
 export function isTimeSlotPast(timeSlot: string, scheduleDate: string): boolean {
   const now = new Date()
-  const pastThresholdMinutes = 30
+  // Grace period: a slot stays bookable until 10 minutes after its start time
+  // (e.g. at 17:05 the 17:00 slot is still clickable, but not after 17:10).
+  const pastThresholdMinutes = 10
   
   // Parse the schedule date and ensure we're working in local time
   const [year, month, day] = scheduleDate.split('-').map(Number)
