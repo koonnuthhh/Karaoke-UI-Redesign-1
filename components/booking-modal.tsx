@@ -908,6 +908,30 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
           {verificationResult && paymentData && (
             <div className="bg-green-50 rounded-lg p-4 mb-6 text-left">
               <h3 className="font-semibold text-green-900 mb-3">Booking Details</h3>
+
+              {/* Prominent date & time so customers can confirm at a glance that
+                  the confirmed slot matches what they intended to book. */}
+              <div className="rounded-lg border-2 border-green-600 bg-white p-3 mb-3">
+                <div className="flex items-center gap-2 mb-1.5 text-green-900">
+                  <Calendar className="w-5 h-5 flex-shrink-0 text-green-600" />
+                  <span className="text-base font-bold">
+                    {new Date(timeSlot.date + "T00:00:00").toLocaleDateString("en-GB", {
+                      weekday: "long",
+                      day: "numeric",
+                      month: "long",
+                      year: "numeric",
+                    })}
+                  </span>
+                </div>
+                <div className="flex items-baseline gap-2 text-green-900">
+                  <Clock className="w-5 h-5 flex-shrink-0 self-center text-green-600" />
+                  <span className="text-2xl font-extrabold tracking-tight">
+                    {displayStartTime} – {displayEndTime}
+                  </span>
+                  <span className="text-sm font-medium">({formatDuration(displayDuration)})</span>
+                </div>
+              </div>
+
               <div className="space-y-2 text-sm text-green-800">
                 <div className="flex justify-between">
                   <span>Booking ID:</span>
@@ -926,22 +950,8 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
                   <span>{formData.customerName}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Date:</span>
-                  <span>{new Date(timeSlot.date).toLocaleDateString()}</span>
-                </div>
-                <div className="flex justify-between">
                   <span>Room:</span>
                   <span>{room.room_name}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Time: </span>
-                  <span>
-                    {displayStartTime} - {displayEndTime}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Duration:</span>
-                  <span>{formatDuration(displayDuration)}</span>
                 </div>
               </div>
             </div>
