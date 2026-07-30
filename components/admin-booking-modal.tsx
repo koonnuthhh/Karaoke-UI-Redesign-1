@@ -49,6 +49,18 @@ function formatDateTime(dateTime: string | undefined) {
     })
 }
 
+function formatBookingDate(date: string | undefined) {
+    if (!date) return "-"
+    // Booking dates are plain "YYYY-MM-DD" (no timezone shift needed)
+    const parsed = new Date(`${date.split("T")[0]}T00:00:00`)
+    if (isNaN(parsed.getTime())) return date
+    return parsed.toLocaleDateString("th-TH", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+    })
+}
+
 interface AdminBookingModalProps {
     isOpen: boolean
     onClose: () => void
@@ -600,6 +612,7 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                         <>
                             <p><strong>Customer:</strong> {bookedSlot?.customerName ?? timeSlot.customerName ?? "Unknown"}</p>
                             <p><strong>Phone:</strong> {bookedSlot?.customerPhone ?? timeSlot.customerPhone ?? "Not provided"}</p>
+                            <p><strong>Date:</strong> {formatBookingDate(bookedSlot?.date ?? timeSlot.date)}</p>
                             <p><strong>Time:</strong> {timeSlot.bookingStart} - {timeSlot.bookingEnd}</p>
                             <p><strong>Created At:</strong> {formatDateTime(bookedSlot?.created_at)}</p>
                             {bookedSlot?.bookedByAdminName && (
