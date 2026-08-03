@@ -68,8 +68,8 @@ export default function HomePage(
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex justify-between items-center text-center mb-4">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+          <div className="flex justify-between items-center text-center mb-0">
             <div className="flex-grow">
               <h1 className="text-3xl font-bold text-gray-900 mb-2">{siteConfig.business.name}</h1>
               <p className="text-lg text-gray-600">{siteConfig.business.tagline}</p>
@@ -106,7 +106,7 @@ export default function HomePage(
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
         {/* Date Selector */}
         <div className="flex items-center justify-between mb-2">
           <DateSelector selectedDate={selectedDate ?? ""} onDateChange={setSelectedDate} />
@@ -141,7 +141,7 @@ export default function HomePage(
 
         {/* Business Info - Only show if the user is NOT an admin */}
         {!adminCredential && (
-          <div className="mt-12 bg-white rounded-lg shadow-lg p-6">
+          <div className="mt-4 bg-white rounded-lg shadow-lg p-6">
             <h3 className="text-xl font-bold text-gray-900 mb-4">Contact Information</h3>
             <div className="grid md:grid-cols-2 gap-6">
               <div>

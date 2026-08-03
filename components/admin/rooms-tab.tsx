@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Edit, Trash2, Plus, AlertCircle, X } from "lucide-react"
+import { Edit, Trash2, Plus, AlertCircle, X, CalendarOff } from "lucide-react"
 import { adminAPI, getAdminUser } from "@/lib/admin-service"
 import { TimeSelect } from "@/components/ui/time-select"
 import type { Room } from "@/types"
@@ -41,6 +41,15 @@ function planRoomReorder(
   return { targetOrder: insertAt + 1, otherUpdates }
 }
 
+// Explicit nulls (not undefined) so JSON.stringify keeps the keys and the
+// backend actually clears the stored window - see the Room type notes.
+const EMPTY_BLACKOUT: Partial<Room> = {
+  blackout_start_date: null,
+  blackout_end_date: null,
+  blackout_start_time: null,
+  blackout_end_time: null,
+}
+
 export function RoomsTab({ rooms, dataLoading, adminCredential, onRefresh }: RoomsTabProps) {
   const [modalOpen, setModalOpen] = useState<"create" | "edit" | "delete" | null>(null)
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null)
@@ -50,6 +59,8 @@ export function RoomsTab({ rooms, dataLoading, adminCredential, onRefresh }: Roo
   const [selectedRoomIds, setSelectedRoomIds] = useState<string[]>([])
   const [isBatchSubmitting, setIsBatchSubmitting] = useState(false)
   const [batchError, setBatchError] = useState("")
+  const [blackoutModalOpen, setBlackoutModalOpen] = useState(false)
+  const [batchBlackout, setBatchBlackout] = useState<Partial<Room>>(EMPTY_BLACKOUT)
 
   const isAdmin = getAdminUser()?.role === "admin"
   // Ascending by display_order; rooms with no order set sort after ordered
@@ -74,19 +85,49 @@ export function RoomsTab({ rooms, dataLoading, adminCredential, onRefresh }: Roo
     setSelectedRoomIds(allSelected ? [] : roomList.map((r) => r.room_id))
   }
 
+  // Applies the same field patch to every selected room. The full room is spread
+  // back in so a backend treating PUT as a replace doesn't drop untouched fields.
+  const applyToSelectedRooms = async (patch: Partial<Room>): Promise<boolean> => {
+    const targets = roomList.filter((r) => selectedRoomIds.includes(r.room_id))
+    const results = await Promise.all(
+      targets.map((room) => adminAPI.updateRoom(room.room_id, { ...room, ...patch }))
+    )
+    return results.every((result) => result.success || result.data)
+  }
+
   const handleBatchSetActive = async (active: boolean) => {
     setIsBatchSubmitting(true)
     setBatchError("")
     try {
-      const targets = roomList.filter((r) => selectedRoomIds.includes(r.room_id))
-      const results = await Promise.all(
-        targets.map((room) => adminAPI.updateRoom(room.room_id, { ...room, is_active: active }))
-      )
-      const failed = results.some((result) => !(result.success || result.data))
-      if (failed) {
-        setBatchError("Some rooms failed to update. Please try again.")
-      } else {
+      if (await applyToSelectedRooms({ is_active: active })) {
         setSelectedRoomIds([])
+      } else {
+        setBatchError("Some rooms failed to update. Please try again.")
+      }
+      onRefresh()
+    } catch (err) {
+      setBatchError("Network error while updating rooms")
+    } finally {
+      setIsBatchSubmitting(false)
+    }
+  }
+
+  const handleBatchBlackout = async (patch: Partial<Room>) => {
+    const blackoutError = validateBlackoutFields(patch)
+    if (blackoutError) {
+      setBatchError(blackoutError)
+      return
+    }
+
+    setIsBatchSubmitting(true)
+    setBatchError("")
+    try {
+      if (await applyToSelectedRooms(patch)) {
+        setSelectedRoomIds([])
+        setBlackoutModalOpen(false)
+        setBatchBlackout(EMPTY_BLACKOUT)
+      } else {
+        setBatchError("Some rooms failed to update. Please try again.")
       }
       onRefresh()
     } catch (err) {
@@ -300,6 +341,17 @@ export function RoomsTab({ rooms, dataLoading, adminCredential, onRefresh }: Roo
               {isBatchSubmitting ? "Updating..." : "Set Inactive"}
             </button>
             <button
+              onClick={() => {
+                setBatchBlackout(EMPTY_BLACKOUT)
+                setBatchError("")
+                setBlackoutModalOpen(true)
+              }}
+              disabled={isBatchSubmitting}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:opacity-50"
+            >
+              <CalendarOff className="w-3.5 h-3.5" /> Set Blackout
+            </button>
+            <button
               onClick={() => setSelectedRoomIds([])}
               disabled={isBatchSubmitting}
               className="text-xs sm:text-sm text-gray-600 hover:text-gray-900"
@@ -409,6 +461,124 @@ export function RoomsTab({ rooms, dataLoading, adminCredential, onRefresh }: Roo
           </div>
         )}
       </div>
+
+      {/* Batch Blackout Modal */}
+      {blackoutModalOpen && (() => {
+        const roomCount = selectedRoomIds.length
+        const selectedNames = roomList
+          .filter((r) => selectedRoomIds.includes(r.room_id))
+          .map((r) => r.room_name)
+        const hasAnyValue =
+          !!batchBlackout.blackout_start_date ||
+          !!batchBlackout.blackout_end_date ||
+          !!batchBlackout.blackout_start_time ||
+          !!batchBlackout.blackout_end_time
+        const closeModal = () => {
+          setBlackoutModalOpen(false)
+          setBatchBlackout(EMPTY_BLACKOUT)
+          setBatchError("")
+        }
+
+        return (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-3 sm:mb-4">
+                <h3 className="text-base sm:text-lg font-bold text-gray-900">Set Blackout for Selected Rooms</h3>
+                <button onClick={closeModal} className="text-gray-500 hover:text-gray-700 flex-shrink-0">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="bg-orange-50 border border-orange-200 rounded-md p-2 sm:p-3 mb-3 sm:mb-4">
+                <p className="text-xs sm:text-sm text-orange-900 font-medium">
+                  Applies to {roomCount} room{roomCount > 1 ? "s" : ""}
+                </p>
+                <p className="text-xs text-orange-800 mt-0.5 break-words">{selectedNames.join(", ")}</p>
+              </div>
+
+              <p className="text-xs text-gray-500 mb-3">
+                Blocks bookings for every selected room on each date in this range, during this daily time window.
+                Leave the times blank to block the whole day. This replaces any blackout those rooms already have.
+              </p>
+
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div>
+                  <label className="block text-xs text-gray-600 mb-0.5">Start Date</label>
+                  <input
+                    type="date"
+                    value={batchBlackout.blackout_start_date || ""}
+                    onChange={(e) =>
+                      setBatchBlackout({ ...batchBlackout, blackout_start_date: e.target.value || null })
+                    }
+                    className="w-full px-2 sm:px-3 py-1 sm:py-2 text-xs sm:text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-0.5">End Date</label>
+                  <input
+                    type="date"
+                    value={batchBlackout.blackout_end_date || ""}
+                    onChange={(e) =>
+                      setBatchBlackout({ ...batchBlackout, blackout_end_date: e.target.value || null })
+                    }
+                    className="w-full px-2 sm:px-3 py-1 sm:py-2 text-xs sm:text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-600 mb-0.5">Start Time (daily)</label>
+                  <TimeSelect
+                    value={batchBlackout.blackout_start_time || ""}
+                    onChange={(time) => setBatchBlackout({ ...batchBlackout, blackout_start_time: time || null })}
+                    allowClear
+                    className="w-full"
+                    selectClassName="flex-1 min-w-0 px-2 sm:px-3 py-1 sm:py-2 text-xs sm:text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-0.5">End Time (daily)</label>
+                  <TimeSelect
+                    value={batchBlackout.blackout_end_time || ""}
+                    onChange={(time) => setBatchBlackout({ ...batchBlackout, blackout_end_time: time || null })}
+                    allowClear
+                    className="w-full"
+                    selectClassName="flex-1 min-w-0 px-2 sm:px-3 py-1 sm:py-2 text-xs sm:text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+              </div>
+
+              {batchError && <p className="text-red-600 mt-3 text-sm">{batchError}</p>}
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={closeModal}
+                  disabled={isBatchSubmitting}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Go Back
+                </button>
+                <button
+                  onClick={() => handleBatchBlackout(batchBlackout)}
+                  disabled={isBatchSubmitting || !hasAnyValue}
+                  className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:opacity-50"
+                >
+                  {isBatchSubmitting ? "Saving..." : `Apply to ${roomCount} room${roomCount > 1 ? "s" : ""}`}
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleBatchBlackout(EMPTY_BLACKOUT)}
+                disabled={isBatchSubmitting}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 mt-3 text-xs sm:text-sm font-medium border border-red-300 text-red-600 bg-white rounded-md hover:bg-red-50 hover:border-red-400 disabled:opacity-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Clear blackout on selected rooms
+              </button>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Create/Edit Room Modal */}
       {(modalOpen === "create" || modalOpen === "edit") && (() => {
@@ -540,9 +710,9 @@ export function RoomsTab({ rooms, dataLoading, adminCredential, onRefresh }: Roo
                     <button
                       type="button"
                       onClick={clearBlackout}
-                      className="text-xs text-red-600 hover:text-red-800 mt-2"
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2 mt-3 text-xs sm:text-sm font-medium border border-red-300 text-red-600 bg-white rounded-md hover:bg-red-50 hover:border-red-400"
                     >
-                      Clear blackout window
+                      <Trash2 className="w-3.5 h-3.5" /> Clear blackout window
                     </button>
                   )}
               </div>

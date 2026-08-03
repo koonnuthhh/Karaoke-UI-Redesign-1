@@ -64,11 +64,11 @@ export function formatDuration(minutes: number): string {
   const mins = minutes % 60
 
   if (hours === 0) {
-    return `${mins} minutes`
+    return `${mins} min`
   } else if (mins === 0) {
-    return `${hours} hour${hours > 1 ? "s" : ""}`
+    return `${hours} hr${hours > 1 ? "s" : ""}`
   } else {
-    return `${hours} hour${hours > 1 ? "s" : ""} ${mins} minutes`
+    return `${hours} hr${hours > 1 ? "s" : ""} ${mins} min`
   }
 }
 
@@ -79,6 +79,91 @@ export function isTimeSlotAvailable(timeSlot: string, roomId: string, bookings: 
       booking.startTime === timeSlot &&
       (booking.status === "booked" || booking.status === "closed"),
   )
+}
+
+// Minutes since the start of the business day for an "HH:MM" (or "HH:MM:SS") time.
+// Times before 06:00 belong to the following calendar day, so overnight hours
+// (open 12:00, close 01:00) stay correctly ordered — same rule the schedule route
+// and the booking modals use.
+export function toBusinessMinutes(time: string): number {
+  const [hours, minutes] = time.split(":").map(Number)
+  const total = hours * 60 + minutes
+  return hours < 6 ? total + 1440 : total
+}
+
+// A block of time a room is already taken for: a booking, or a blackout window.
+export interface BookedRange {
+  id?: string
+  roomId: string
+  startTime: string
+  endTime: string
+  status?: string
+  customerName?: string | null
+}
+
+// The first range in `ranges` that overlaps [startTime, endTime) in the same room —
+// i.e. why the requested window can't be booked. Cancelled ranges and
+// `excludeBookingId` (the booking being edited, so it doesn't collide with its own
+// current slot) are skipped. `ranges` must all be for the same date as the window.
+export function findOverlappingBooking<T extends BookedRange>(
+  ranges: T[],
+  roomId: string,
+  startTime: string,
+  endTime: string,
+  excludeBookingId?: string,
+): T | undefined {
+  if (!startTime || !endTime) return undefined
+
+  const start = toBusinessMinutes(startTime)
+  let end = toBusinessMinutes(endTime)
+  if (end <= start) end += 1440 // Window runs past midnight
+
+  return ranges.find((range) => {
+    if (range.roomId !== roomId) return false
+    if (excludeBookingId && range.id === excludeBookingId) return false
+    if (range.status?.toLowerCase() === "cancelled") return false
+    if (!range.startTime || !range.endTime) return false
+
+    const rangeStart = toBusinessMinutes(range.startTime)
+    let rangeEnd = toBusinessMinutes(range.endTime)
+    if (rangeEnd <= rangeStart) rangeEnd += 1440
+
+    return rangeStart < end && rangeEnd > start
+  })
+}
+
+// How many minutes are actually free in `roomId` from `startTime` — until the next
+// occupied range or `closeTime`, whichever comes first. Returns 0 when `startTime`
+// itself already falls inside an occupied range. Used to tell an admin how much really
+// fits, instead of silently shrinking a booking down to match.
+export function freeMinutesFrom(
+  ranges: BookedRange[],
+  roomId: string,
+  startTime: string,
+  closeTime: string,
+  excludeBookingId?: string,
+): number {
+  if (!startTime) return 0
+
+  const start = toBusinessMinutes(startTime)
+  let limit = toBusinessMinutes(closeTime)
+  if (limit <= start) limit += 1440
+
+  for (const range of ranges) {
+    if (range.roomId !== roomId) continue
+    if (excludeBookingId && range.id === excludeBookingId) continue
+    if (range.status?.toLowerCase() === "cancelled") continue
+    if (!range.startTime || !range.endTime) continue
+
+    const rangeStart = toBusinessMinutes(range.startTime)
+    let rangeEnd = toBusinessMinutes(range.endTime)
+    if (rangeEnd <= rangeStart) rangeEnd += 1440
+
+    if (rangeStart <= start && rangeEnd > start) return 0 // Start is inside this range
+    if (rangeStart > start) limit = Math.min(limit, rangeStart)
+  }
+
+  return Math.max(0, limit - start)
 }
 
 export function getConsecutiveSlots(selectedSlots: string[], allSlots: string[]): boolean {

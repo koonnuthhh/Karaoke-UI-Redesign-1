@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Calendar, ChevronLeft, ChevronRight, RefreshCw, Eye, Pencil, X, AlertCircle, Plus, Minus } from "lucide-react"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { PromoInput } from "@/components/promo-input"
-import { calculatePrice, formatDuration, generateTimeSlots } from "@/lib/time-utils"
+import { calculatePrice, formatDuration, generateTimeSlots, findOverlappingBooking, freeMinutesFrom, type BookedRange } from "@/lib/time-utils"
 import { getAdminUser } from "@/lib/admin-service"
 import { siteConfig } from "@/config/site-config"
 import type { TimeSlot, Room } from "@/types"
@@ -48,9 +48,16 @@ function addMinutesToTime(time: string, minutes: number): string {
   return `${hh}:${mm}`
 }
 
+// Booking dates come back as plain "YYYY-MM-DD" or a full ISO string; <input type="date">
+// only accepts the former.
+function toDateInputValue(date: string | undefined): string {
+  return date ? date.split("T")[0] : ""
+}
+
 interface EditFormState {
   roomId: string
   customerName: string
+  date: string
   startTime: string
   duration: number
 }
@@ -77,6 +84,11 @@ export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabP
   const [discount, setDiscount] = useState<DiscountState | null>(null)
   const [appliedPromoCode, setAppliedPromoCode] = useState<string | null>(null)
   const [appliedPromotionId, setAppliedPromotionId] = useState<string | null>(null)
+  // Bookings of the date being edited, when it differs from the date currently listed —
+  // `bookings` only covers `selectedDate`, so moving a booking to another day needs that
+  // day's bookings to check for collisions.
+  const [editDateBookings, setEditDateBookings] = useState<TimeSlot[] | null>(null)
+  const [isLoadingEditDate, setIsLoadingEditDate] = useState(false)
   const currentUser = getAdminUser()
 
   useEffect(() => {
@@ -89,29 +101,19 @@ export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabP
   const editRoom = editForm ? rooms.find((r) => r.room_id === editForm.roomId) : undefined
 
   // Same overnight-close rule as the booking page: the 00:30 slot may extend to 02:00,
-  // every other start time is capped at the configured close time. The conflict bound
-  // is the next booking in the same room (excluding this one and cancelled ones), so an
-  // edit can't be stretched over another booking.
+  // every other start time is capped at the configured close time.
   const editEffectiveCloseTime = editForm?.startTime === "00:30" ? "02:00" : siteConfig.schedule.closeTime
-  const editNextBookingStart = editForm
-    ? bookings
-        .filter((b) =>
-          b.id !== editTarget?.id &&
-          b.roomId === editForm.roomId &&
-          b.status?.toLowerCase() !== "cancelled" &&
-          toComparableDate(b.startTime) > toComparableDate(editForm.startTime),
-        )
-        .map((b) => b.startTime)
-        .sort((a, z) => toComparableDate(a).getTime() - toComparableDate(z).getTime())[0]
-    : undefined
+  const editIsSameDate = !editForm || editForm.date === toDateInputValue(editTarget?.date)
+  const editDayBookings = editIsSameDate ? bookings : (editDateBookings ?? [])
+
+  // Only closing time caps the duration. Existing bookings deliberately don't: moving to a
+  // date with less room used to silently collapse a 2 hr booking to 30 min, so the booking
+  // now keeps its hours and the clash is reported instead (see editOverlap).
   const editMaxDuration = editForm
-    ? Math.max(MIN_DURATION_MINUTES, Math.min(
-        minutesBetween(editForm.startTime, editEffectiveCloseTime),
-        editNextBookingStart ? minutesBetween(editForm.startTime, editNextBookingStart) : Infinity,
-      ))
+    ? Math.max(MIN_DURATION_MINUTES, minutesBetween(editForm.startTime, editEffectiveCloseTime))
     : MIN_DURATION_MINUTES
 
-  // Clamp at render so a start-time/room change that shrinks the window never leaves a
+  // Clamp at render so a start-time change that moves closing time nearer never leaves a
   // stale over-long duration selected.
   const editDuration = editForm
     ? Math.min(Math.max(editForm.duration, MIN_DURATION_MINUTES), editMaxDuration)
@@ -125,6 +127,60 @@ export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabP
     editForm && setEditForm({ ...editForm, duration: Math.min(Math.max(editDuration, MIN_DURATION_MINUTES) + 30, editMaxDuration) })
   const decrementEditDuration = () =>
     editForm && setEditForm({ ...editForm, duration: Math.max(editDuration - 30, MIN_DURATION_MINUTES) })
+
+  // Hard guard on the whole edited window: the room must be free for the full duration on
+  // the selected date. Save stays blocked until it is.
+  const editOccupiedRanges: BookedRange[] = editDayBookings.map((b) => {
+    const start = b.startTime?.slice(0, 5) || ""
+    return {
+      id: b.id,
+      roomId: b.roomId,
+      startTime: start,
+      endTime: (b.endTime?.slice(0, 5)) || addMinutesToTime(start, b.duration || 0),
+      status: b.status,
+      customerName: b.customerName,
+    }
+  })
+  const editOverlap = editForm && !isLoadingEditDate
+    ? findOverlappingBooking(editOccupiedRanges, editForm.roomId, editForm.startTime, editEndTime, editTarget?.id)
+    : undefined
+
+  // How much would actually fit, so the warning can say what's possible instead of just
+  // that it clashes.
+  const editFreeMinutes = editForm && editOverlap
+    ? freeMinutesFrom(editOccupiedRanges, editForm.roomId, editForm.startTime, editEffectiveCloseTime, editTarget?.id)
+    : 0
+
+  // Load the target date's bookings when the edit moves the booking to another day, so the
+  // collision checks above reflect that day and not the one currently listed.
+  useEffect(() => {
+    if (!editForm || editIsSameDate) {
+      setEditDateBookings(null)
+      setIsLoadingEditDate(false)
+      return
+    }
+    let cancelled = false
+    const targetDate = editForm.date
+    setIsLoadingEditDate(true)
+    const loadDateBookings = async () => {
+      try {
+        const response = await fetch(`/api/admin/bookings?date=${targetDate}`)
+        const data = await response.json()
+        if (cancelled) return
+        setEditDateBookings(data.bookings || [])
+      } catch (err) {
+        if (!cancelled) {
+          setEditDateBookings([])
+          setEditError("Could not load that date's bookings. Availability may be inaccurate.")
+        }
+      } finally {
+        if (!cancelled) setIsLoadingEditDate(false)
+      }
+    }
+    loadDateBookings()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editForm?.date, editIsSameDate])
 
   // Automatically recalculate the applied promo's discount when the price,
   // room, or time being edited changes.
@@ -141,7 +197,7 @@ export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabP
               code: appliedPromoCode,
               total_price: priceToUse,
               roomId: editForm.roomId,
-              date: editTarget?.date,
+              date: editForm.date,
               time: editForm.startTime,
               endTime: editEndTime,
             },
@@ -161,7 +217,7 @@ export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabP
     }
     reapplyPromo()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customPrice, appliedPromoCode, editCalculatedPrice, editForm?.roomId, editForm?.startTime, editEndTime])
+  }, [customPrice, appliedPromoCode, editCalculatedPrice, editForm?.roomId, editForm?.date, editForm?.startTime, editEndTime])
 
   const fetchBookings = async (date: string) => {
     setLoading(true)
@@ -224,10 +280,12 @@ export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabP
     setEditForm({
       roomId: booking.roomId,
       customerName: booking.customerName || "",
+      date: toDateInputValue(booking.date),
       // Normalize to "HH:MM" so it matches the slot dropdown options
       startTime: booking.startTime?.slice(0, 5) || booking.startTime,
       duration: booking.duration || 30,
     })
+    setEditDateBookings(null)
     setCustomPrice(null)
     setDiscount(null)
     setAppliedPromoCode(null)
@@ -238,6 +296,8 @@ export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabP
     setEditTarget(null)
     setEditForm(null)
     setEditError("")
+    setEditDateBookings(null)
+    setIsLoadingEditDate(false)
     setCustomPrice(null)
     setDiscount(null)
     setAppliedPromoCode(null)
@@ -246,6 +306,11 @@ export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabP
 
   const handleSaveEdit = async () => {
     if (!editTarget?.id || !editForm) return
+    if (isLoadingEditDate) return
+    if (editOverlap) {
+      setEditError("This room is already booked during that time on the selected date.")
+      return
+    }
 
     setIsSaving(true)
     setEditError("")
@@ -257,6 +322,7 @@ export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabP
           booking_id: editTarget.id,
           room_id: editForm.roomId,
           username: editForm.customerName,
+          date: editForm.date,
           start_time: editForm.startTime,
           end_time: editEndTime,
           price: editFinalPrice,
@@ -728,6 +794,24 @@ export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabP
                 />
               </div>
 
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                <input
+                  type="date"
+                  value={editForm.date}
+                  onChange={(e) => setEditForm({ ...editForm, date: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                {isLoadingEditDate && (
+                  <p className="text-xs text-gray-500 mt-1">Checking availability for this date…</p>
+                )}
+                {!editIsSameDate && !isLoadingEditDate && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    Moving this booking from {toDateInputValue(editTarget.date)} to {editForm.date}.
+                  </p>
+                )}
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
@@ -776,6 +860,22 @@ export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabP
                 End Time: {editEndTime}
               </p>
 
+              {editOverlap && (
+                <div className="text-sm text-red-600 rounded-md border border-red-200 bg-red-50 p-3">
+                  <p>
+                    {formatDuration(editDuration)} ({editForm.startTime} – {editEndTime}) doesn't fit in{" "}
+                    {editRoom?.room_name ?? "this room"} on {editForm.date} — it overlaps an existing booking
+                    ({editOverlap.startTime} – {editOverlap.endTime}
+                    {editOverlap.customerName ? `, ${editOverlap.customerName}` : ""}).
+                  </p>
+                  <p className="mt-1">
+                    {editFreeMinutes >= MIN_DURATION_MINUTES
+                      ? `Only ${formatDuration(editFreeMinutes)} is free from ${editForm.startTime}. Shorten the booking, or pick another date, time, or room.`
+                      : `Nothing is free from ${editForm.startTime}. Pick another date, time, or room.`}
+                  </p>
+                </div>
+              )}
+
               {/* Booking Summary — mirrors AdminBookingModal's live price calculation */}
               <div className="bg-indigo-50 rounded-lg p-3 text-sm">
                 <p><span className="font-medium">Original Price:</span> ฿{editCalculatedPrice.toFixed(2)}</p>
@@ -812,7 +912,7 @@ export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabP
               <PromoInput
                 cartTotal={editPriceBeforeDiscount}
                 roomId={editForm.roomId}
-                bookingDate={editTarget.date}
+                bookingDate={editForm.date}
                 bookingTime={editForm.startTime}
                 bookingEndTime={editEndTime}
                 externalDiscount={discount}
@@ -846,7 +946,7 @@ export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabP
               </button>
               <button
                 onClick={handleSaveEdit}
-                disabled={isSaving}
+                disabled={isSaving || isLoadingEditDate || !!editOverlap || !editForm.date}
                 className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
               >
                 {isSaving

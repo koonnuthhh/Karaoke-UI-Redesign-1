@@ -268,6 +268,12 @@ export function ScheduleTable({ scheduleData, isLoading, adminCredential, handle
     )
   }
 
+  //create format date to display in header
+  function formatBookingDate(date: Date): string {
+    const options: Intl.DateTimeFormatOptions = { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' }
+    return date.toLocaleDateString('en-UK', options)
+  }
+
   return (
     <>
       <div
@@ -276,12 +282,9 @@ export function ScheduleTable({ scheduleData, isLoading, adminCredential, handle
           background: `linear-gradient(to right, ${siteConfig.theme.secondary}, ${siteConfig.theme.primary})`,
         }}
       >
-        <h2 className="text-xl font-bold text-white">
-          {"Room Availability"}
+        <h2 className="text-lg font-bold text-white">
+          Schedule for {formatBookingDate(new Date(scheduleData.date))}
         </h2>
-        <p className="text-purple-100 text-sm mt-1">
-          Schedule for {new Date(scheduleData.date).toLocaleDateString()}
-        </p>
       </div>
       <div className="bg-white rounded-lg shadow-lg overflow-hidden">
 
@@ -290,7 +293,7 @@ export function ScheduleTable({ scheduleData, isLoading, adminCredential, handle
           <table className="w-full table-fixed">
             <thead className="sticky top-0 z-10" style={{ backgroundColor: '#f9fafb' }}>
               <tr>
-                <th className="w-12 sm:w-20 px-1 sm:px-3 py-1.5 sm:py-3 text-left text-[10px] sm:text-xs font-medium uppercase tracking-wider" style={{ color: siteConfig.theme.maintext }}>
+                <th className="w-10 sm:w-10 px-1 sm:px-2 py-1.5 sm:py-3 text-left text-[10px] sm:text-xs font-medium uppercase tracking-wider" style={{ color: siteConfig.theme.maintext }}>
                   Time
                 </th>
                 {scheduleData.rooms
@@ -320,7 +323,7 @@ export function ScheduleTable({ scheduleData, isLoading, adminCredential, handle
             <tbody className="bg-white divide-y" style={{ borderColor: '#e5e7eb' }}>
               {scheduleData.timeSlots.slice(0, -1).map((timeSlot) => (
                 <tr key={timeSlot} className="hover:bg-gray-50">
-                  <td className="w-12 sm:w-20 px-1 sm:px-4 py-1.5 sm:py-3 whitespace-nowrap text-[11px] sm:text-sm font-medium" style={{ color: siteConfig.theme.maintext }}>
+                  <td className="w-10 sm:w-10 px-1 sm:px-2 py-1.5 sm:py-3 whitespace-nowrap text-[11px] sm:text-sm font-medium" style={{ color: siteConfig.theme.maintext }}>
                     {timeSlot}
                   </td>
                   {scheduleData.rooms

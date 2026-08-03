@@ -469,7 +469,7 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
               {/* Fixed width so the text length changing (e.g. "1 hour" vs "1 hour 30 minutes")
                   never shifts the +/- buttons out from under repeated clicks. */}
               <span
-                className="w-[9.5rem] flex-shrink-0 text-center font-semibold whitespace-nowrap"
+                className="w-[7rem] flex-shrink-0 text-center font-semibold whitespace-nowrap"
                 style={{ color: siteConfig.theme.maintext }}
               >
                 {formatDuration(totalDuration)}
