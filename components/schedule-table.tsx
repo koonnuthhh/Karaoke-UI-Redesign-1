@@ -136,7 +136,7 @@ function SlotCell({
 
   return (
     <td
-      className="px-1 sm:px-4 py-1.5 sm:py-3 text-center"
+      className="px-0.5 sm:px-4 py-1 sm:py-3 text-center"
       onMouseEnter={() => setIsHover(true)}
       onMouseLeave={() => setIsHover(false)}
     >
@@ -276,8 +276,7 @@ export function ScheduleTable({ scheduleData, isLoading, adminCredential, handle
 
   return (
     <>
-      <div
-        className="px-6 py-4 sticky top-0 z-50"
+      <div className="p-3 sticky top-0 z-50"
         style={{
           background: `linear-gradient(to right, ${siteConfig.theme.secondary}, ${siteConfig.theme.primary})`,
         }}
@@ -323,7 +322,7 @@ export function ScheduleTable({ scheduleData, isLoading, adminCredential, handle
             <tbody className="bg-white divide-y" style={{ borderColor: '#e5e7eb' }}>
               {scheduleData.timeSlots.slice(0, -1).map((timeSlot) => (
                 <tr key={timeSlot} className="hover:bg-gray-50">
-                  <td className="w-10 sm:w-10 px-1 sm:px-2 py-1.5 sm:py-3 whitespace-nowrap text-[11px] sm:text-sm font-medium" style={{ color: siteConfig.theme.maintext }}>
+                  <td className="w-10 sm:w-10 px-1 sm:px-2 py-1 sm:py-3 whitespace-nowrap text-[11px] sm:text-sm font-medium" style={{ color: siteConfig.theme.maintext }}>
                     {timeSlot}
                   </td>
                   {scheduleData.rooms
