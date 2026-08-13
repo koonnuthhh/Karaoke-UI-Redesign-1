@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Calendar, Users, DoorOpen, Gift, BookOpen } from "lucide-react"
+import { Calendar, Users, DoorOpen, Gift, BookOpen, Activity } from "lucide-react"
 import { useAdminAuth } from "hooks/use-admin-auth"
 import { AdminLogin } from "@/components/AdminLogin"
 import { AdminHeader } from "@/components/AdminHeader"
@@ -11,9 +11,10 @@ import { AdminsTab } from "@/components/admin/admins-tab"
 import { RoomsTab } from "@/components/admin/rooms-tab"
 import { PromotionsTab } from "@/components/admin/promotions-tab"
 import { BookingsTab } from "@/components/admin/bookings-tab"
+import { LiveRoomsTab } from "@/components/admin/live-rooms-tab"
 import type { Admin, Room, Promotion } from "@/types"
 
-type TabType = "dashboard" | "admins" | "rooms" | "promotions" | "bookings"
+type TabType = "dashboard" | "live" | "admins" | "rooms" | "promotions" | "bookings"
 
 export default function AdminPanel() {
   const router = useRouter()
@@ -100,12 +101,13 @@ export default function AdminPanel() {
           <div className="flex gap-4 sm:gap-8 min-w-min">
             {[
               { id: "dashboard", label: "Dashboard" },
-              { id: "admins", label: "Admins", icon: <Users className="w-4 h-4" /> },
+              { id: "live", label: "Live Rooms", icon: <Activity className="w-4 h-4" /> },
               { id: "rooms", label: "Rooms", icon: <DoorOpen className="w-4 h-4" /> },
-              { id: "bookings", label: "Bookings", icon: <BookOpen className="w-4 h-4" /> },
               // href-based tab navigates to a route instead of switching the active tab
               { id: "schedule", label: "Schedule", icon: <Calendar className="w-4 h-4" />, href: "/" },
-              { id: "promotions", label: "Promotions", icon: <Gift className="w-4 h-4" /> }
+              { id: "promotions", label: "Promotions", icon: <Gift className="w-4 h-4" /> },
+              { id: "bookings", label: "Bookings", icon: <BookOpen className="w-4 h-4" /> },
+              { id: "admins", label: "Admins", icon: <Users className="w-4 h-4" /> },
             ].map((tab: any) => (
               <button
                 key={tab.id}
@@ -134,6 +136,10 @@ export default function AdminPanel() {
             onNavigateToRooms={() => setActiveTab("rooms")}
             onNavigateToCalendar={() => router.push("/")}
           />
+        )}
+
+        {activeTab === "live" && (
+          <LiveRoomsTab rooms={rooms} onNavigateToBookings={() => setActiveTab("bookings")} />
         )}
 
         {activeTab === "admins" && (
