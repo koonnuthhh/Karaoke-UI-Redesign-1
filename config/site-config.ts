@@ -22,6 +22,9 @@ export const siteConfig = {
     slotDuration: 30, // minutes
     closeTime: "01:00",
     openTime: "12:00",
+    // How often the Live Rooms tab re-fetches bookings. Must stay longer than that
+    // tab's own CLOCK_TICK_MS, which re-renders the countdowns between fetches.
+    refreshIntervalMs: 60000,
   },
 
   // Business Hours

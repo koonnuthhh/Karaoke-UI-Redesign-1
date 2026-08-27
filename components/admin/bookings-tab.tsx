@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Calendar, ChevronLeft, ChevronRight, RefreshCw, Eye, Pencil, X, AlertCircle, Plus, Minus } from "lucide-react"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { PromoInput } from "@/components/promo-input"
-import { calculatePrice, formatDuration, generateTimeSlots, findOverlappingBooking, freeMinutesFrom, type BookedRange } from "@/lib/time-utils"
+import { calculatePrice, formatDuration, generateTimeSlots, findOverlappingBooking, freeMinutesFrom, findBlackoutOverlap, type BookedRange } from "@/lib/time-utils"
 import { getAdminUser } from "@/lib/admin-service"
 import { siteConfig } from "@/config/site-config"
 import type { TimeSlot, Room } from "@/types"
@@ -150,6 +150,12 @@ export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabP
   const editFreeMinutes = editForm && editOverlap
     ? freeMinutesFrom(editOccupiedRanges, editForm.roomId, editForm.startTime, editEffectiveCloseTime, editTarget?.id)
     : 0
+
+  // Advisory only: admins may book over a closed period, so this warns without blocking.
+  const editBlackoutWarning = editForm && editRoom
+    ? findBlackoutOverlap(editRoom, editForm.date, editForm.startTime, editEndTime)
+    : undefined
+  const editRoomInactive = editRoom?.is_active === false
 
   // Load the target date's bookings when the edit moves the booking to another day, so the
   // collision checks above reflect that day and not the one currently listed.
@@ -873,6 +879,16 @@ export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabP
                       ? `Only ${formatDuration(editFreeMinutes)} is free from ${editForm.startTime}. Shorten the booking, or pick another date, time, or room.`
                       : `Nothing is free from ${editForm.startTime}. Pick another date, time, or room.`}
                   </p>
+                </div>
+              )}
+
+              {/* Advisory, not a block: admins may extend into a closed period. */}
+              {(editBlackoutWarning || editRoomInactive) && (
+                <div className="text-sm rounded-md border border-amber-300 bg-amber-50 p-3 text-amber-900">
+                  {editRoomInactive
+                    ? `${editRoom?.room_name ?? "This room"} is currently switched off (inactive).`
+                    : `${editRoom?.room_name ?? "This room"} is closed from ${editBlackoutWarning!.startTime} to ${editBlackoutWarning!.endTime} on ${editForm.date}.`}{" "}
+                  You are editing as an admin — save to book anyway.
                 </div>
               )}
 

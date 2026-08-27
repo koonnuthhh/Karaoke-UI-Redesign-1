@@ -3,13 +3,18 @@
 import { useState, useEffect, useMemo } from "react"
 import { RefreshCw, Clock, DoorOpen, Users, Wrench, Phone, ArrowRight, CalendarClock } from "lucide-react"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
-import { toBusinessMinutes, formatDuration } from "@/lib/time-utils"
+import { toBusinessMinutes, formatDuration, isRoomBlackedOut } from "@/lib/time-utils"
 import { siteConfig } from "@/config/site-config"
 import type { TimeSlot, Room } from "@/types"
 
 // How often the countdowns re-render. Shorter than the data refresh so "ends in
 // X min" doesn't sit visibly stale between fetches.
 const CLOCK_TICK_MS = 15000
+
+// Fallback refresh period. setInterval() treats an undefined delay as 0, which turns a
+// missing config value into a request flood rather than a visible error, so the delay
+// is floored here instead of being passed through raw.
+const DEFAULT_REFRESH_MS = 60000
 
 // Ascending by display_order; rooms with no order set sort after ordered ones,
 // falling back to alphabetical by name - same ordering as the schedule grid.
@@ -62,20 +67,10 @@ function bookingWindow(booking: TimeSlot): { start: number; end: number } | null
   return { start: startMin, end: endMin }
 }
 
-// Same rule as the schedule route: a blackout is a date range plus an optional
-// DAILY recurring time window during which the room can't be used.
+// "Is this room blacked out at this instant" - the shared window test narrowed to the
+// single minute we're rendering.
 function isRoomBlackedOutNow(room: Room, date: string, nowMin: number): boolean {
-  const { blackout_start_date, blackout_end_date, blackout_start_time, blackout_end_time } = room
-
-  if (!blackout_start_date || !blackout_end_date) return false
-  if (date < blackout_start_date || date > blackout_end_date) return false
-  if (!blackout_start_time || !blackout_end_time) return true // Whole day
-
-  const start = toBusinessMinutes(blackout_start_time.slice(0, 5))
-  let end = toBusinessMinutes(blackout_end_time.slice(0, 5))
-  if (end <= start) end += 1440
-
-  return nowMin >= start && nowMin < end
+  return isRoomBlackedOut(room, date, nowMin, nowMin + 1)
 }
 
 // "in 25 min" / "in 2 hrs 5 min", or "now" once the gap has closed.
@@ -145,7 +140,8 @@ export function LiveRoomsTab({ rooms, onNavigateToBookings }: LiveRoomsTabProps)
   // (i.e. someone leaves this page open past 06:00).
   useEffect(() => {
     fetchBookings(businessDate, true)
-    const timer = setInterval(() => fetchBookings(businessDate), siteConfig.schedule.refreshIntervalMs)
+    const refreshMs = Math.max(CLOCK_TICK_MS, siteConfig.schedule.refreshIntervalMs || DEFAULT_REFRESH_MS)
+    const timer = setInterval(() => fetchBookings(businessDate), refreshMs)
     return () => clearInterval(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessDate])

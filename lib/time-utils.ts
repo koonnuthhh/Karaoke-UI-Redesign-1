@@ -1,4 +1,5 @@
-import { TimeSlot } from "types"
+import { Room, TimeSlot } from "types"
+import { siteConfig } from "@/config/site-config"
 
 
 export function generateTimeSlots(startTime: string, endTime: string, slotDuration = 30): string[] {
@@ -72,12 +73,24 @@ export function formatDuration(minutes: number): string {
   }
 }
 
-export function isTimeSlotAvailable(timeSlot: string, roomId: string, bookings: TimeSlot[]): boolean {
+// A blackout ("closed") is only a soft block: admins are allowed to book straight
+// through one, so admin flows pass { ignoreClosed: true } to drop it from the check.
+// Real bookings stay a hard block for everyone.
+export interface AvailabilityOptions {
+  ignoreClosed?: boolean
+}
+
+export function isTimeSlotAvailable(
+  timeSlot: string,
+  roomId: string,
+  bookings: TimeSlot[],
+  options: AvailabilityOptions = {},
+): boolean {
   return !bookings.some(
     (booking) =>
       booking.roomId === roomId &&
       booking.startTime === timeSlot &&
-      (booking.status === "booked" || booking.status === "closed"),
+      (booking.status === "booked" || (booking.status === "closed" && !options.ignoreClosed)),
   )
 }
 
@@ -89,6 +102,53 @@ export function toBusinessMinutes(time: string): number {
   const [hours, minutes] = time.split(":").map(Number)
   const total = hours * 60 + minutes
   return hours < 6 ? total + 1440 : total
+}
+
+// A room's blackout: a date range plus an optional DAILY recurring time window during
+// which the room is unavailable. Missing times mean the whole day. Same rule as
+// app/api/schedule/route.ts, but expressed in business minutes so a caller can test an
+// arbitrary window rather than one slot. The schedule route keeps its own copy on
+// purpose - it normalises times against closeTime instead of the 06:00 rule here.
+export function isRoomBlackedOut(
+  room: Pick<Room, "blackout_start_date" | "blackout_end_date" | "blackout_start_time" | "blackout_end_time">,
+  date: string,
+  startMinutes: number,
+  endMinutes: number,
+): boolean {
+  const { blackout_start_date, blackout_end_date, blackout_start_time, blackout_end_time } = room
+
+  if (!blackout_start_date || !blackout_end_date) return false
+  if (date < blackout_start_date || date > blackout_end_date) return false
+  if (!blackout_start_time || !blackout_end_time) return true // Whole day
+
+  const start = toBusinessMinutes(blackout_start_time.slice(0, 5))
+  let end = toBusinessMinutes(blackout_end_time.slice(0, 5))
+  if (end <= start) end += 1440 // Overnight blackout window
+
+  return startMinutes < end && endMinutes > start
+}
+
+// The blackout window overlapping [startTime, endTime) in `room` on `date`, as an
+// "HH:MM - HH:MM" pair, or undefined when the window is clear. Used to tell an admin
+// exactly which closed period they are booking over.
+export function findBlackoutOverlap(
+  room: Pick<Room, "blackout_start_date" | "blackout_end_date" | "blackout_start_time" | "blackout_end_time">,
+  date: string,
+  startTime: string,
+  endTime: string,
+): { startTime: string; endTime: string } | undefined {
+  if (!startTime || !endTime) return undefined
+
+  const start = toBusinessMinutes(startTime)
+  let end = toBusinessMinutes(endTime)
+  if (end <= start) end += 1440
+
+  if (!isRoomBlackedOut(room, date, start, end)) return undefined
+
+  return {
+    startTime: room.blackout_start_time?.slice(0, 5) || siteConfig.schedule.openTime,
+    endTime: room.blackout_end_time?.slice(0, 5) || siteConfig.schedule.closeTime,
+  }
 }
 
 // A block of time a room is already taken for: a booking, or a blackout window.

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { X, Plus, Minus } from "lucide-react"
 import { siteConfig } from "../config/site-config"
 import type { TimeSlot, Room, ScheduleData, BookingRequest } from "../types"
-import { calculatePrice, formatDuration, isTimeSlotAvailable, findOverlappingBooking, freeMinutesFrom, type BookedRange } from "../lib/time-utils"
+import { calculatePrice, formatDuration, isTimeSlotAvailable, findOverlappingBooking, freeMinutesFrom, findBlackoutOverlap, type BookedRange } from "../lib/time-utils"
 import { LoadingSpinner } from "../components/ui/loading-spinner"
 import { AlertModal } from "./AlertModal"
 import { PromoInput } from "./promo-input"
@@ -12,6 +12,11 @@ import { getAdminUser } from "../lib/admin-service"
 import { isValidThaiPhone } from "../lib/validation"
 
 const MIN_DURATION_MINUTES = 30 // bookings step in half-hour increments, 30 min minimum
+
+// This modal is admin-only, and admins may book over a room's blackout window. Every
+// availability check here therefore ignores "closed" slots; they surface as a warning
+// instead (see blackoutWarning / editBlackoutWarning) rather than blocking the save.
+const ADMIN_AVAILABILITY = { ignoreClosed: true } as const
 
 // Treats times before 06:00 as belonging to "the next day" so overnight
 // hours (e.g. open 12:00, close 01:00) compare/add correctly.
@@ -129,7 +134,7 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
     const editStartOptions = editForm
         ? scheduleData.timeSlots
             .slice(0, -1)
-            .filter(slot => slot === editForm.startTime || isTimeSlotAvailable(slot, editForm.roomId, editBookingsExclSelf))
+            .filter(slot => slot === editForm.startTime || isTimeSlotAvailable(slot, editForm.roomId, editBookingsExclSelf, ADMIN_AVAILABILITY))
         : []
 
     // Only closing time caps the duration. Existing bookings deliberately don't: moving to
@@ -157,12 +162,14 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
 
     // The slot grid carries one entry per room × slot; collapse it back to the distinct
     // blocks of time that are actually taken on that day, so the edited window can be
-    // range-checked instead of only slot-by-slot.
+    // range-checked instead of only slot-by-slot. Only real bookings land here —
+    // blackout ("closed") slots are deliberately left out, because an admin is allowed
+    // to book straight through a closed period and only gets a warning for it.
     const editOccupiedRanges: BookedRange[] = []
     const seenBookingIds = new Set<string>()
     for (const slot of editBookingsExclSelf) {
         const status = slot.status?.toLowerCase()
-        if (status !== "booked" && status !== "pending" && status !== "closed") continue
+        if (status !== "booked" && status !== "pending") continue
         if (slot.bookingStart && slot.bookingEnd) {
             if (slot.id && seenBookingIds.has(slot.id)) continue
             if (slot.id) seenBookingIds.add(slot.id)
@@ -175,7 +182,7 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                 customerName: slot.customerName,
             })
         } else {
-            // Blackout ("closed") slots carry no booking times — they occupy their own slot.
+            // A booking with no times recorded still occupies the slot it sits in.
             editOccupiedRanges.push({
                 id: slot.id,
                 roomId: slot.roomId,
@@ -197,6 +204,14 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
     const editFreeMinutes = editForm && editOverlap
         ? freeMinutesFrom(editOccupiedRanges, editForm.roomId, editForm.startTime, editEffectiveCloseTime, timeSlot.id)
         : 0
+
+    // Advisory only: the edited window runs over a period the room is closed. Reading the
+    // room's own blackout window (rather than the day's "closed" slots) gives the real
+    // span, and works for a date whose schedule hasn't been fetched.
+    const editBlackoutWarning = editForm && editRoom
+        ? findBlackoutOverlap(editRoom, editForm.date, editForm.startTime, editEndTime)
+        : undefined
+    const editRoomInactive = editRoom?.is_active === false
 
     // Load the target date's bookings when the edit moves the booking to another day, so
     // the start-time options and duration bounds reflect that day and not the one the
@@ -341,9 +356,10 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
     }
 
 
-    // same available slots logic as BookingModal
+    // Same available-slot logic as BookingModal, except blackouts don't remove a start
+    // time here — an admin may open a closed period.
     const availableSlots = scheduleData.timeSlots.filter((slot) =>
-        isTimeSlotAvailable(slot, room.room_id, scheduleData.bookings),
+        isTimeSlotAvailable(slot, room.room_id, scheduleData.bookings, ADMIN_AVAILABILITY),
     )
 
     const firstUnavailableSlot = scheduleData.timeSlots
@@ -355,7 +371,7 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
             else startTimeObj = new Date(`2000-01-01T${startTime}`)
             return slotTime > startTimeObj
         })
-        .find(slot => !isTimeSlotAvailable(slot, room.room_id, scheduleData.bookings))
+        .find(slot => !isTimeSlotAvailable(slot, room.room_id, scheduleData.bookings, ADMIN_AVAILABILITY))
 
     // Reset custom price, discount, and duration when modal opens
     useEffect(() => {
@@ -398,6 +414,11 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
         setDurationMinutes((prev) => Math.min(Math.max(prev, MIN_DURATION_MINUTES) + 30, maxDurationMinutes))
     const decrementDuration = () =>
         setDurationMinutes((prev) => Math.max(prev - 30, MIN_DURATION_MINUTES))
+
+    // Advisory only: the window being created runs over a closed period, or the room is
+    // switched off entirely. Neither blocks an admin — both just warn.
+    const blackoutWarning = findBlackoutOverlap(room, toDateInputValue(timeSlot.date), startTime, endTime)
+    const roomInactive = room.is_active === false
 
     const calculatedPrice = calculatePrice(room.price_per_half_hour, totalDuration)
 
@@ -644,16 +665,25 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                                 <div className="text-sm text-red-600 -mt-2 mb-4 rounded-md border border-red-200 bg-red-50 p-3">
                                     <p>
                                         {formatDuration(editDuration)} ({editForm.startTime} – {editEndTime}) doesn't fit in{" "}
-                                        {editRoom?.room_name ?? "this room"} on {formatBookingDate(editForm.date)} — it overlaps{" "}
-                                        {editOverlap.status?.toLowerCase() === "closed"
-                                            ? "a period this room is closed"
-                                            : `an existing booking (${editOverlap.startTime} – ${editOverlap.endTime}${editOverlap.customerName ? `, ${editOverlap.customerName}` : ""})`}.
+                                        {editRoom?.room_name ?? "this room"} on {formatBookingDate(editForm.date)} — it overlaps an
+                                        existing booking ({editOverlap.startTime} – {editOverlap.endTime}
+                                        {editOverlap.customerName ? `, ${editOverlap.customerName}` : ""}).
                                     </p>
                                     <p className="mt-1">
                                         {editFreeMinutes >= MIN_DURATION_MINUTES
                                             ? `Only ${formatDuration(editFreeMinutes)} is free from ${editForm.startTime}. Shorten the booking, or pick another date, time, or room.`
                                             : `Nothing is free from ${editForm.startTime}. Pick another date, time, or room.`}
                                     </p>
+                                </div>
+                            )}
+
+                            {/* Advisory, not a block: admins may extend into a closed period. */}
+                            {(editBlackoutWarning || editRoomInactive) && (
+                                <div className="text-sm -mt-2 mb-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-amber-900">
+                                    {editRoomInactive
+                                        ? `${editRoom?.room_name ?? "This room"} is currently switched off (inactive).`
+                                        : `${editRoom?.room_name ?? "This room"} is closed from ${editBlackoutWarning!.startTime} to ${editBlackoutWarning!.endTime} on ${formatBookingDate(editForm.date)}.`}{" "}
+                                    You are editing as an admin — save to book anyway.
                                 </div>
                             )}
 
@@ -819,6 +849,15 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                                     <p className="text-sm mt-2 text-red-600">
                                         This start time can't fit a {MIN_DURATION_MINUTES}-minute booking. Pick an earlier start time.
                                     </p>
+                                )}
+                                {/* Advisory, not a block: admins may book a closed room. */}
+                                {(blackoutWarning || roomInactive) && (
+                                    <div className="text-sm mt-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-amber-900">
+                                        {roomInactive
+                                            ? `${room.room_name} is currently switched off (inactive).`
+                                            : `${room.room_name} is closed from ${blackoutWarning!.startTime} to ${blackoutWarning!.endTime}.`}{" "}
+                                        You are booking as an admin — confirm to book anyway.
+                                    </div>
                                 )}
                             </div>
 
