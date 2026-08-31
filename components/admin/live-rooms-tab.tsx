@@ -1,9 +1,16 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { RefreshCw, Clock, DoorOpen, Users, Wrench, Phone, ArrowRight, CalendarClock } from "lucide-react"
+import { RefreshCw, DoorOpen, Users, Wrench, ArrowRight, CalendarClock } from "lucide-react"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
-import { toBusinessMinutes, formatDuration, isRoomBlackedOut } from "@/lib/time-utils"
+import { formatDuration } from "@/lib/time-utils"
+import {
+  RoomTimelineChart,
+  bookingWindow,
+  compareRoomOrder,
+  hhmm,
+  isRoomBlackedOutNow,
+} from "@/components/admin/room-timeline-chart"
 import { siteConfig } from "@/config/site-config"
 import type { TimeSlot, Room } from "@/types"
 
@@ -15,17 +22,6 @@ const CLOCK_TICK_MS = 15000
 // missing config value into a request flood rather than a visible error, so the delay
 // is floored here instead of being passed through raw.
 const DEFAULT_REFRESH_MS = 60000
-
-// Ascending by display_order; rooms with no order set sort after ordered ones,
-// falling back to alphabetical by name - same ordering as the schedule grid.
-function compareRoomOrder(a: Room, b: Room): number {
-  const aOrder = a.display_order ?? null
-  const bOrder = b.display_order ?? null
-  if (aOrder !== null && bOrder !== null && aOrder !== bOrder) return aOrder - bOrder
-  if (aOrder !== null && bOrder === null) return -1
-  if (aOrder === null && bOrder !== null) return 1
-  return a.room_name.localeCompare(b.room_name)
-}
 
 // Local "YYYY-MM-DD". Not toISOString() - that is UTC and would roll the date
 // over 7 hours early in Thailand.
@@ -51,28 +47,6 @@ function nowBusinessMinutes(now: Date): number {
   return now.getHours() < 6 ? total + 1440 : total
 }
 
-function hhmm(time?: string): string {
-  return time ? time.slice(0, 5) : "--:--"
-}
-
-// Occupied window of a booking on the business-minutes scale.
-function bookingWindow(booking: TimeSlot): { start: number; end: number } | null {
-  const start = hhmm(booking.startTime)
-  const end = hhmm(booking.endTime)
-  if (start === "--:--" || end === "--:--") return null
-
-  const startMin = toBusinessMinutes(start)
-  let endMin = toBusinessMinutes(end)
-  if (endMin <= startMin) endMin += 1440 // Runs past midnight
-  return { start: startMin, end: endMin }
-}
-
-// "Is this room blacked out at this instant" - the shared window test narrowed to the
-// single minute we're rendering.
-function isRoomBlackedOutNow(room: Room, date: string, nowMin: number): boolean {
-  return isRoomBlackedOut(room, date, nowMin, nowMin + 1)
-}
-
 // "in 25 min" / "in 2 hrs 5 min", or "now" once the gap has closed.
 function relativeFromNow(minutes: number): string {
   if (minutes <= 0) return "now"
@@ -87,8 +61,6 @@ interface QueuedBooking {
 interface RoomStatus {
   room: Room
   current?: TimeSlot
-  currentEndsIn: number
-  currentElapsedPercent: number
   upcoming: QueuedBooking[]
   // Why the room can't take a customer right now, if it can't. A room can still be
   // showing a live booking while unavailable (e.g. a blackout added mid-session), so
@@ -146,11 +118,17 @@ export function LiveRoomsTab({ rooms, onNavigateToBookings }: LiveRoomsTabProps)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessDate])
 
-  const roomStatuses: RoomStatus[] = useMemo(() => {
-    const active = bookings.filter((b) => b.status?.toLowerCase() !== "cancelled")
+  // Shared by the summary counts, the queue and the timeline chart, so all three agree
+  // on which bookings and which room order they are describing.
+  const activeBookings = useMemo(
+    () => bookings.filter((b) => b.status?.toLowerCase() !== "cancelled"),
+    [bookings],
+  )
+  const sortedRooms = useMemo(() => [...rooms].sort(compareRoomOrder), [rooms])
 
-    return [...rooms].sort(compareRoomOrder).map((room) => {
-      const roomBookings = active
+  const roomStatuses: RoomStatus[] = useMemo(() => {
+    return sortedRooms.map((room) => {
+      const roomBookings = activeBookings
         .filter((b) => b.roomId === room.room_id)
         .map((b) => ({ booking: b, window: bookingWindow(b) }))
         .filter((entry): entry is { booking: TimeSlot; window: { start: number; end: number } } => entry.window !== null)
@@ -158,13 +136,10 @@ export function LiveRoomsTab({ rooms, onNavigateToBookings }: LiveRoomsTabProps)
 
       const current = roomBookings.find((e) => e.window.start <= nowMin && e.window.end > nowMin)
       const upcoming = roomBookings.filter((e) => e.window.start > nowMin)
-      const duration = current ? current.window.end - current.window.start : 0
 
       return {
         room,
         current: current?.booking,
-        currentEndsIn: current ? current.window.end - nowMin : 0,
-        currentElapsedPercent: duration > 0 ? Math.min(100, ((nowMin - current!.window.start) / duration) * 100) : 0,
         upcoming: upcoming.map((e) => ({ booking: e.booking, startsIn: e.window.start - nowMin })),
         unavailableReason: room.is_active === false
           ? ("inactive" as const)
@@ -173,7 +148,7 @@ export function LiveRoomsTab({ rooms, onNavigateToBookings }: LiveRoomsTabProps)
             : undefined,
       }
     })
-  }, [rooms, bookings, nowMin, businessDate])
+  }, [sortedRooms, activeBookings, nowMin, businessDate])
 
   // Everyone still to come today, across all rooms, earliest first - the queue an
   // admin actually reads off when someone asks "who's next?".
@@ -230,17 +205,13 @@ export function LiveRoomsTab({ rooms, onNavigateToBookings }: LiveRoomsTabProps)
         <SummaryCard label="Queue Left" value={queue.length} icon={<CalendarClock className="w-8 h-8 text-blue-500 opacity-20" />} />
       </div>
 
-      {/* Room cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
-        {roomStatuses.map((status) => (
-          <RoomCard key={status.room.room_id} status={status} />
-        ))}
-        {roomStatuses.length === 0 && (
-          <div className="col-span-full bg-white rounded-lg shadow p-8 text-center text-slate-500 text-sm">
-            No rooms configured.
-          </div>
-        )}
-      </div>
+      {/* Rooms x time, from the current slot to closing */}
+      <RoomTimelineChart
+        rooms={sortedRooms}
+        bookings={activeBookings}
+        businessDate={businessDate}
+        nowMin={nowMin}
+      />
 
       {/* Queue across all rooms */}
       <div className="mt-6 sm:mt-8 bg-white rounded-lg shadow overflow-hidden">
@@ -316,87 +287,4 @@ function StatusPill({ status }: { status?: string }) {
         : "bg-slate-100 text-slate-600"
 
   return <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium capitalize ${styles}`}>{status || "unknown"}</span>
-}
-
-function RoomCard({ status }: { status: RoomStatus }) {
-  const { room, current, currentEndsIn, currentElapsedPercent, upcoming, unavailableReason } = status
-  const next = upcoming[0]
-
-  const accent = current ? "border-rose-500" : unavailableReason ? "border-slate-400" : "border-emerald-500"
-
-  return (
-    <div className={`bg-white rounded-lg shadow border-l-4 ${accent} p-4`}>
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <h3 className="font-semibold text-gray-900 truncate">{room.room_name}</h3>
-        {current ? (
-          <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-rose-100 text-rose-700 whitespace-nowrap">
-            In use
-          </span>
-        ) : unavailableReason ? (
-          <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-200 text-slate-700 whitespace-nowrap">
-            {unavailableReason === "inactive" ? "Closed" : "Blackout"}
-          </span>
-        ) : (
-          <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-100 text-emerald-700 whitespace-nowrap">
-            Free
-          </span>
-        )}
-      </div>
-
-      {current ? (
-        <div className="mb-3">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-medium text-gray-900 truncate">{current.customerName || "Walk-in"}</p>
-            <StatusPill status={current.status} />
-          </div>
-          <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
-            <Clock className="w-3 h-3" /> {hhmm(current.startTime)} - {hhmm(current.endTime)}
-          </p>
-          {current.customerPhone && (
-            <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
-              <Phone className="w-3 h-3" /> {current.customerPhone}
-            </p>
-          )}
-
-          <div className="mt-2">
-            <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-              <div className="h-full bg-rose-500 rounded-full" style={{ width: `${currentElapsedPercent}%` }} />
-            </div>
-            <p className="text-xs font-medium text-rose-600 mt-1">
-              {currentEndsIn > 0 ? `${formatDuration(currentEndsIn)} left` : "Ending now"}
-            </p>
-          </div>
-        </div>
-      ) : (
-        <p className="text-sm text-slate-500 mb-3">
-          {unavailableReason === "inactive"
-            ? "Room is set inactive"
-            : unavailableReason === "blackout"
-              ? "Blocked by a blackout window"
-              : "Nobody in this room right now"}
-        </p>
-      )}
-
-      {/* Next in queue for this room */}
-      <div className="pt-3 border-t border-slate-100">
-        {next ? (
-          <>
-            <p className="text-[11px] uppercase tracking-wide text-slate-400 mb-1">Next</p>
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-sm text-gray-900 truncate">
-                {next.booking.customerName || "Walk-in"}
-                <span className="text-slate-400"> &middot; {hhmm(next.booking.startTime)}-{hhmm(next.booking.endTime)}</span>
-              </p>
-              <span className="text-xs text-slate-500 whitespace-nowrap">{relativeFromNow(next.startsIn)}</span>
-            </div>
-            {upcoming.length > 1 && (
-              <p className="text-xs text-slate-400 mt-1">+{upcoming.length - 1} more later today</p>
-            )}
-          </>
-        ) : (
-          <p className="text-xs text-slate-400">No further bookings today</p>
-        )}
-      </div>
-    </div>
-  )
 }
