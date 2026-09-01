@@ -243,6 +243,10 @@ export function getConsecutiveSlots(selectedSlots: string[], allSlots: string[])
   return true
 }
 
+// A customer booking must cover at least this long. Admin bookings use their own,
+// smaller minimum (see MIN_DURATION_MINUTES in the admin modals).
+export const CUSTOMER_MIN_DURATION_MINUTES = 60
+
 export function isTimeSlotPast(timeSlot: string, scheduleDate: string): boolean {
   const now = new Date()
   // Grace period: a slot stays bookable until 10 minutes after its start time
@@ -274,4 +278,45 @@ export function isTimeSlotPast(timeSlot: string, scheduleDate: string): boolean 
   
   // Compare with current time
   return slotDate < now
+}
+
+// "HH:MM" shifted by `minutes`, wrapping around midnight.
+function shiftTime(time: string, minutes: number): string {
+  const [hours, mins] = time.split(":").map(Number)
+  const total = (((hours * 60 + mins + minutes) % 1440) + 1440) % 1440
+  const hh = Math.floor(total / 60).toString().padStart(2, "0")
+  const mm = (total % 60).toString().padStart(2, "0")
+  return `${hh}:${mm}`
+}
+
+// The time a booking starting at `startTime` must end by. Single source of truth for
+// the closing rule — every duration cap in the app goes through here.
+//
+//   admin    -> adminCloseTime, in every case
+//   customer -> closeTime, except the final lateNightStartSlot cell once the slot
+//               before it has expired, which may run to lateNightCloseTime
+//
+// The exception exists because lateNightStartSlot (00:30) is only half an hour from
+// closeTime, i.e. below the customer minimum, so without it the slot would never be
+// bookable. It opens the moment the preceding 00:00 slot passes its grace period —
+// from then on 00:30 is the earliest cell still open and a walk-in has nothing else to
+// take. Booked in advance (00:00 still live, or a future date) it stays at closeTime.
+export function getEffectiveCloseTime(
+  startTime: string,
+  scheduleDate: string,
+  options: { isAdmin?: boolean } = {},
+): string {
+  const { closeTime, adminCloseTime, slotDuration, lateNightStartSlot, lateNightCloseTime } =
+    siteConfig.schedule
+
+  if (options.isAdmin) return adminCloseTime
+
+  if (
+    startTime === lateNightStartSlot &&
+    isTimeSlotPast(shiftTime(lateNightStartSlot, -slotDuration), scheduleDate)
+  ) {
+    return lateNightCloseTime
+  }
+
+  return closeTime
 }

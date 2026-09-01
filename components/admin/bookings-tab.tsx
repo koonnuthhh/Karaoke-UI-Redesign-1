@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Calendar, ChevronLeft, ChevronRight, RefreshCw, Eye, Pencil, X, AlertCircle, Plus, Minus } from "lucide-react"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { PromoInput } from "@/components/promo-input"
-import { calculatePrice, formatDuration, generateTimeSlots, findOverlappingBooking, freeMinutesFrom, findBlackoutOverlap, type BookedRange } from "@/lib/time-utils"
+import { calculatePrice, formatDuration, generateTimeSlots, findOverlappingBooking, freeMinutesFrom, findBlackoutOverlap, getEffectiveCloseTime, type BookedRange } from "@/lib/time-utils"
 import { getAdminUser } from "@/lib/admin-service"
 import { siteConfig } from "@/config/site-config"
 import type { TimeSlot, Room } from "@/types"
@@ -12,12 +12,13 @@ import type { TimeSlot, Room } from "@/types"
 const MIN_DURATION_MINUTES = 30 // bookings step in half-hour increments, 30 min minimum
 
 // Bookable start slots within business hours (same grid the Admin Booking modal
-// offers). Drops the final close slot since a booking can't start at closing time.
+// offers). The close slot is kept: this tab is admin-only, and an admin starting at
+// 01:00 still has an hour before adminCloseTime.
 const START_TIME_OPTIONS = generateTimeSlots(
   siteConfig.schedule.openTime,
   siteConfig.schedule.closeTime,
   siteConfig.schedule.slotDuration,
-).slice(0, -1)
+)
 
 // Minutes between two "HH:MM" times, treating an end that is not after the start as
 // crossing midnight (e.g. 00:30 -> 02:00 spans the overnight close).
@@ -100,9 +101,9 @@ export function BookingsTab({ dataLoading, onRefresh, rooms = [] }: BookingsTabP
   // uses when creating a booking.
   const editRoom = editForm ? rooms.find((r) => r.room_id === editForm.roomId) : undefined
 
-  // Same overnight-close rule as the booking page: the 00:30 slot may extend to 02:00,
-  // every other start time is capped at the configured close time.
-  const editEffectiveCloseTime = editForm?.startTime === "00:30" ? "02:00" : siteConfig.schedule.closeTime
+  // Same rule as the booking page: an admin books up to adminCloseTime whatever the
+  // start time is.
+  const editEffectiveCloseTime = getEffectiveCloseTime(editForm?.startTime ?? "", editForm?.date ?? "", { isAdmin: true })
   const editIsSameDate = !editForm || editForm.date === toDateInputValue(editTarget?.date)
   const editDayBookings = editIsSameDate ? bookings : (editDateBookings ?? [])
 

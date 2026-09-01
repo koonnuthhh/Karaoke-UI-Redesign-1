@@ -7,7 +7,7 @@ import { LoadingSpinner } from "../components/ui/loading-spinner"
 import { BookingModal } from "../components/booking-modal"
 import { AdminBookingModal } from "../components/admin-booking-modal"
 import { AlertModal } from "./AlertModal"
-import { isTimeSlotPast } from "../lib/time-utils"
+import { isTimeSlotPast, toBusinessMinutes, getEffectiveCloseTime, CUSTOMER_MIN_DURATION_MINUTES } from "../lib/time-utils"
 import { getAdminUser } from "../lib/admin-service"
 import { getStoredPendingBooking } from "../lib/pending-booking"
 import type { Room } from "../types"
@@ -237,6 +237,15 @@ export function ScheduleTable({ scheduleData, isLoading, adminCredential, handle
     //console.log("Slot data:",slot)
     // Only check when user is not admin and slot is available
     if (!adminCredential && slot.status === "available") {
+      // Closing time can leave less than the 1 hr minimum — the 00:30 slot booked in
+      // advance runs only to 01:00. Catch it here so the cell just refuses, instead of
+      // opening a modal whose Continue button is dead.
+      const closeTime = getEffectiveCloseTime(slot.startTime, scheduleData.date)
+      if (toBusinessMinutes(closeTime) - toBusinessMinutes(slot.startTime) < CUSTOMER_MIN_DURATION_MINUTES) {
+        setAlertMessage("Can't book less than 1 hour")
+        return
+      }
+
       const slotIndex = scheduleData.timeSlots.indexOf(slot.startTime)
 
       // Each slot = 30 min, so need at least 2 consecutive slots

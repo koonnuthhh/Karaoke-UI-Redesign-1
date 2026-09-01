@@ -5,7 +5,7 @@ import { useState, useEffect, useRef } from "react"
 import { X, Upload, Check, AlertCircle, Loader2, Minus, Plus, Calendar, Clock } from "lucide-react"
 import { siteConfig } from "../config/site-config"
 import type { TimeSlot, Room, ScheduleData } from "../types"
-import { calculatePrice, formatDuration, isTimeSlotAvailable } from "../lib/time-utils"
+import { calculatePrice, formatDuration, isTimeSlotAvailable, getEffectiveCloseTime, CUSTOMER_MIN_DURATION_MINUTES } from "../lib/time-utils"
 import { LoadingSpinner } from "./ui/loading-spinner"
 import { PromoInput } from "./promo-input"
 import promptpay from "promptpay-qr"
@@ -52,7 +52,7 @@ const STEP_LABELS: { step: Step; label: string }[] = [
   { step: "verify", label: "Verify" },
 ]
 
-const MIN_DURATION_HALF_STEPS = 2 // 1 hour minimum booking
+const MIN_DURATION_HALF_STEPS = CUSTOMER_MIN_DURATION_MINUTES / siteConfig.schedule.slotDuration
 
 // Treats times before 06:00 as belonging to "the next day" so overnight
 // hours (e.g. open 12:00, close 01:00) compare correctly.
@@ -129,10 +129,9 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, timeSlot.id, timeSlot.status])
 
-  // Only the last slot before close (01:00) can extend the booking past
-  // normal closing time, and only up to 02:00 in that one case.
-  const isMidnightHalf = startTime === "00:30"
-  const effectiveCloseTime = isMidnightHalf ? "02:00" : siteConfig.schedule.closeTime
+  // Customers book up to the normal close time. The one exception is a walk-in during
+  // the final 00:30 slot, who may run to 01:30 — see getEffectiveCloseTime.
+  const effectiveCloseTime = getEffectiveCloseTime(startTime, scheduleData.date)
 
   const firstUnavailableSlot = scheduleData.timeSlots
     .filter((slot) => toComparableDate(slot) > toComparableDate(startTime))

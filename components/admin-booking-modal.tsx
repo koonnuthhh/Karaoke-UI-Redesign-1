@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { X, Plus, Minus } from "lucide-react"
 import { siteConfig } from "../config/site-config"
 import type { TimeSlot, Room, ScheduleData, BookingRequest } from "../types"
-import { calculatePrice, formatDuration, isTimeSlotAvailable, findOverlappingBooking, freeMinutesFrom, findBlackoutOverlap, type BookedRange } from "../lib/time-utils"
+import { calculatePrice, formatDuration, isTimeSlotAvailable, findOverlappingBooking, freeMinutesFrom, findBlackoutOverlap, getEffectiveCloseTime, type BookedRange } from "../lib/time-utils"
 import { LoadingSpinner } from "../components/ui/loading-spinner"
 import { AlertModal } from "./AlertModal"
 import { PromoInput } from "./promo-input"
@@ -120,20 +120,19 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
 
     const editRoom = editForm ? scheduleData.rooms.find(r => r.room_id === editForm.roomId) : undefined
 
-    // Same overnight-close rule as the create flow: the 00:30 slot may extend to 02:00,
-    // every other start time is capped at the configured close time.
-    const editIsMidnightHalf = editForm?.startTime === "00:30"
-    const editEffectiveCloseTime = editIsMidnightHalf ? "02:00" : siteConfig.schedule.closeTime
+    // Same rule as the create flow: an admin books up to adminCloseTime whatever the
+    // start time is.
+    const editEffectiveCloseTime = getEffectiveCloseTime(editForm?.startTime ?? "", editForm?.date ?? "", { isAdmin: true })
     const editIsSameDate = !editForm || editForm.date === toDateInputValue(timeSlot.date)
     const editDateSchedule = editIsSameDate ? scheduleData.bookings : (editDateBookings ?? [])
     const editBookingsExclSelf = editDateSchedule.filter(b => b.id !== timeSlot.id)
 
     // Bookable start slots (same grid the create flow offers): business-hour slots that
-    // are free for the target room, excluding the close slot, plus the booking's own
-    // current start so it stays selectable.
+    // are free for the target room, plus the booking's own current start so it stays
+    // selectable. The close slot is kept — an admin starting at 01:00 still has an hour
+    // before adminCloseTime.
     const editStartOptions = editForm
         ? scheduleData.timeSlots
-            .slice(0, -1)
             .filter(slot => slot === editForm.startTime || isTimeSlotAvailable(slot, editForm.roomId, editBookingsExclSelf, ADMIN_AVAILABILITY))
         : []
 
@@ -386,11 +385,9 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen, timeSlot.id]);
 
-    // Mirrors BookingModal: only the 00:30 slot (the last one before the 01:00 close)
-    // may extend past normal closing, and only up to 02:00. Every other start time is
-    // capped at the configured close time.
-    const isMidnightHalf = startTime === "00:30"
-    const effectiveCloseTime = isMidnightHalf ? "02:00" : siteConfig.schedule.closeTime
+    // Admins book up to adminCloseTime (02:00) from any start time — unlike customers,
+    // who are held to the 01:00 close. See getEffectiveCloseTime.
+    const effectiveCloseTime = getEffectiveCloseTime(startTime, scheduleData.date, { isAdmin: true })
 
     // Max duration is bounded by whichever comes first: the effective close time, or
     // the next already-booked slot (a conflict). 01:30/02:00 aren't real bookable

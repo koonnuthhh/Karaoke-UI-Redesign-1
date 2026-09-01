@@ -22,6 +22,15 @@ export const siteConfig = {
     slotDuration: 30, // minutes
     closeTime: "01:00",
     openTime: "12:00",
+    // Admins may book right up to this time in every case — the walk-in exception
+    // below is for customers only. See getEffectiveCloseTime in lib/time-utils.ts.
+    adminCloseTime: "02:00",
+    // The final 00:30 slot sits only half an hour from closeTime, below the customer
+    // minimum, so on its own it would never be bookable. Once the 00:00 slot before it
+    // expires it becomes the earliest cell still open and a walk-in may run to 01:30.
+    // Booked in advance it stays capped at closeTime. See getEffectiveCloseTime.
+    lateNightStartSlot: "00:30",
+    lateNightCloseTime: "01:30",
     // How far the Live Rooms timeline draws, which is deliberately NOT closeTime:
     // sessions booked up to closing still run past it, and the chart has to show them
     // rather than clipping them at the right edge. Bookable hours stay openTime..closeTime.
