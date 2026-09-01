@@ -57,11 +57,12 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
 }
 
-// Two bookings belong to the same party when the account matches; walk-ins have no
-// user_id, so fall back to the name.
-function samePartyAs(a: MergedBooking, b: TimeSlot): boolean {
-  if (a.customerID && b.customerID) return a.customerID === b.customerID
-  return (a.customerName || "") === (b.customerName || "")
+// Two records are one session only when they are the same account. A name match is NOT
+// enough: two walk-ins can be entered under the same name and still be different
+// customers, and merging those would hide one of them behind the other's block. Walk-ins
+// carry no user_id, so they never merge - each booking stands on its own.
+function sameAccount(a: MergedBooking, b: TimeSlot): boolean {
+  return Boolean(a.customerID) && Boolean(b.customerID) && a.customerID === b.customerID
 }
 
 interface MergedBooking {
@@ -77,7 +78,7 @@ interface MergedBooking {
 }
 
 // /api/admin/bookings already returns one row per booking, so a 3-hour session arrives
-// as a single row. This only collapses the other case: the same customer holding two
+// as a single row. This only collapses the other case: one signed-in account holding two
 // back-to-back rows in one room, which should read as one continuous block.
 function mergeRoomBookings(bookings: TimeSlot[]): MergedBooking[] {
   const entries = bookings
@@ -92,7 +93,7 @@ function mergeRoomBookings(bookings: TimeSlot[]): MergedBooking[] {
     const contiguous = last && window.start <= last.end
     const sameStatus = last && (last.status || "").toLowerCase() === (booking.status || "").toLowerCase()
 
-    if (last && contiguous && sameStatus && samePartyAs(last, booking)) {
+    if (last && contiguous && sameStatus && sameAccount(last, booking)) {
       if (window.end > last.end) {
         last.end = window.end
         last.endLabel = hhmm(booking.endTime)
@@ -139,17 +140,19 @@ function blackoutBlocks(room: Room, date: string, slots: VisibleSlot[], slotDura
   return blocks
 }
 
-// Who a block belongs to. Walk-ins have no user_id, so the name is the fallback key -
-// the same rule the merge uses.
-function partyKey(block: MergedBooking): string {
-  return block.customerID ? String(block.customerID) : block.customerName || "walk-in"
+// Colour is keyed to the booking record, not to the customer. Names are not identity
+// here - two walk-ins are routinely entered under the same name while being different
+// people - so colouring by name would paint two unrelated parties the same and make a
+// back-to-back pair read as one long session.
+function blockKey(block: MergedBooking): string {
+  return block.ids[0]
 }
 
-// Stable palette slot for a party, so one customer keeps the same colour across rooms
-// and across refreshes rather than shuffling on every render. Plain hash * 31: on the
-// key shapes this actually sees - "user-001", "booking-1782856145501-173", customer
-// names - it walks sequential ids round-robin through the palette, which spreads
-// neighbouring bookings better here than a stronger avalanche hash does.
+// Stable palette slot for a booking, so a record keeps its colour across refreshes
+// rather than shuffling on every render. Plain hash * 31: on the key shapes this
+// actually sees - "booking-001", "booking-1782856145501-173" - it walks sequential ids
+// round-robin through the palette, which spreads neighbouring bookings better here than
+// a stronger avalanche hash does.
 function paletteIndexFor(key: string, length: number): number {
   let hash = 0
   for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) | 0
@@ -159,13 +162,13 @@ function paletteIndexFor(key: string, length: number): number {
 // Colours for one room's blocks, in time order. Two blocks that touch must never share
 // a colour - that is exactly the case ("A ends 17:00, B starts 17:00") where one long
 // bar would otherwise read as a single booking. Blocks with a real gap between them can
-// safely reuse a colour, which keeps a customer's colour stable more often.
+// safely reuse a colour, which keeps each record's colour stable more often.
 function assignBlockColors(blocks: MergedBooking[]): string[] {
   const palette = siteConfig.theme.roomBookingPalette
   const indexes: number[] = []
 
   blocks.forEach((block, i) => {
-    let index = paletteIndexFor(partyKey(block), palette.length)
+    let index = paletteIndexFor(blockKey(block), palette.length)
     const previous = blocks[i - 1]
     if (previous && block.start <= previous.end && index === indexes[i - 1]) {
       index = (index + 1) % palette.length
@@ -177,7 +180,7 @@ function assignBlockColors(blocks: MergedBooking[]): string[] {
 }
 
 // "pending" is an unpaid booking still holding the slot. Colour now identifies the
-// customer, so the status rides along as a hatch instead of a hue.
+// booking, so the status rides along as a hatch instead of a hue.
 function isPending(status?: string): boolean {
   return status?.toLowerCase() === "pending"
 }
@@ -261,7 +264,7 @@ export function RoomTimelineChart({ rooms, bookings, businessDate, nowMin }: Roo
                 <span key={color} className="h-2.5 w-2 rounded-sm" style={{ backgroundColor: color }} />
               ))}
             </span>
-            one colour per customer
+            one colour per booking
           </span>
           <LegendSwatch color={siteConfig.theme.roomBookingPalette[0]} label="Pending" hatched />
           <LegendSwatch color={siteConfig.theme.roomclosed} label="Closed" />
