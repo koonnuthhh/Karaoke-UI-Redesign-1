@@ -129,9 +129,13 @@ export function BookingModal({ isOpen, onClose, timeSlot, room, scheduleData }: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, timeSlot.id, timeSlot.status])
 
-  // Customers book up to the normal close time. The one exception is a walk-in during
-  // the final 00:30 slot, who may run to 01:30 — see getEffectiveCloseTime.
-  const effectiveCloseTime = getEffectiveCloseTime(startTime, scheduleData.date)
+  // Customers book up to the normal close time. The one exception is the final 00:30
+  // slot when nothing else is left to take — see getEffectiveCloseTime, which needs the
+  // room and its bookings to tell whether 00:30 is the only free cell here.
+  const effectiveCloseTime = getEffectiveCloseTime(startTime, scheduleData.date, {
+    roomId: room.room_id,
+    bookings: scheduleData.bookings,
+  })
 
   const firstUnavailableSlot = scheduleData.timeSlots
     .filter((slot) => toComparableDate(slot) > toComparableDate(startTime))

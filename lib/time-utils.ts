@@ -293,29 +293,40 @@ function shiftTime(time: string, minutes: number): string {
 // the closing rule — every duration cap in the app goes through here.
 //
 //   admin    -> adminCloseTime, in every case
-//   customer -> closeTime, except the final lateNightStartSlot cell once the slot
-//               before it has expired, which may run to lateNightCloseTime
+//   customer -> closeTime, except the final lateNightStartSlot cell when nothing else
+//               is left to take, which may run to lateNightCloseTime
 //
 // The exception exists because lateNightStartSlot (00:30) is only half an hour from
-// closeTime, i.e. below the customer minimum, so without it the slot would never be
-// bookable. It opens the moment the preceding 00:00 slot passes its grace period —
-// from then on 00:30 is the earliest cell still open and a walk-in has nothing else to
-// take. Booked in advance (00:00 still live, or a future date) it stays at closeTime.
+// closeTime, i.e. below the customer minimum, so on its own it would never be bookable.
+// It opens once the 00:00 slot before it is out of reach, either way that can happen:
+//
+//   - the clock has passed 00:00's grace period, so 00:30 is the earliest cell still
+//     open (pass nothing extra — this is the walk-in case), or
+//   - 00:00 is already taken in this room, so 00:30 is the only free cell there (pass
+//     `roomId` + `bookings`; without them this arm is simply skipped).
+//
+// While 00:00 is still both live and free the customer books that instead, so 00:30
+// stays at closeTime and its cell refuses — that is what keeps advance bookings out.
 export function getEffectiveCloseTime(
   startTime: string,
   scheduleDate: string,
-  options: { isAdmin?: boolean } = {},
+  options: { isAdmin?: boolean; roomId?: string; bookings?: TimeSlot[] } = {},
 ): string {
   const { closeTime, adminCloseTime, slotDuration, lateNightStartSlot, lateNightCloseTime } =
     siteConfig.schedule
 
   if (options.isAdmin) return adminCloseTime
 
-  if (
-    startTime === lateNightStartSlot &&
-    isTimeSlotPast(shiftTime(lateNightStartSlot, -slotDuration), scheduleDate)
-  ) {
-    return lateNightCloseTime
+  if (startTime === lateNightStartSlot) {
+    const previousSlot = shiftTime(lateNightStartSlot, -slotDuration)
+
+    const previousExpired = isTimeSlotPast(previousSlot, scheduleDate)
+    const previousTaken =
+      options.roomId !== undefined &&
+      options.bookings !== undefined &&
+      !isTimeSlotAvailable(previousSlot, options.roomId, options.bookings)
+
+    if (previousExpired || previousTaken) return lateNightCloseTime
   }
 
   return closeTime

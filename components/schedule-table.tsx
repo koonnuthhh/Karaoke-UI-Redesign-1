@@ -240,7 +240,10 @@ export function ScheduleTable({ scheduleData, isLoading, adminCredential, handle
       // Closing time can leave less than the 1 hr minimum — the 00:30 slot booked in
       // advance runs only to 01:00. Catch it here so the cell just refuses, instead of
       // opening a modal whose Continue button is dead.
-      const closeTime = getEffectiveCloseTime(slot.startTime, scheduleData.date)
+      const closeTime = getEffectiveCloseTime(slot.startTime, scheduleData.date, {
+        roomId: slot.roomId,
+        bookings: scheduleData.bookings,
+      })
       if (toBusinessMinutes(closeTime) - toBusinessMinutes(slot.startTime) < CUSTOMER_MIN_DURATION_MINUTES) {
         setAlertMessage("Can't book less than 1 hour")
         return
