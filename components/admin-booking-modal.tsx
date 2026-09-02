@@ -766,6 +766,7 @@ export function AdminBookingModal({ isOpen, onClose, timeSlot, room, scheduleDat
                         </>
                     ) : isManageableSlot ? (
                         <>
+                            <p><strong>Room:</strong> {bookedSlot?.roomName ?? timeSlot.roomName ?? room.room_name}</p>
                             <p><strong>Customer:</strong> {bookedSlot?.customerName ?? timeSlot.customerName ?? "Unknown"}</p>
                             <p><strong>Phone:</strong> {bookedSlot?.customerPhone ?? timeSlot.customerPhone ?? "Not provided"}</p>
                             <p><strong>Date:</strong> {formatBookingDate(bookedSlot?.date ?? timeSlot.date)}</p>
